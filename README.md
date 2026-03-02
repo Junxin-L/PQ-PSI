@@ -1,3 +1,4 @@
+WILL MOVE TO OSUCRYPTO LATER
 #  Private Set Intersection for Small Sets
 This is the implementation of our [CCS 2021](http://dl.acm.org/citation.cfm?id=2978381)  paper: **Compact and Malicious Private Set Intersection for Small Sets**[[ePrint](https://eprint.iacr.org/2021)]. 
 
@@ -70,4 +71,5 @@ our protocol (Poly-based PSI)
 		
 ## Help
 For any questions on building or running the library, please contact [`Ni Trieu`](http://people.oregonstate.edu/~trieun/) at trieun at oregonstate dot edu
+
 
