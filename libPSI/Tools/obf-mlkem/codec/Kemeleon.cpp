@@ -1,43 +1,91 @@
 #include "Kemeleon.h"
 
-#include <boost/multiprecision/cpp_int.hpp>
+#include <gmp.h>
 #include <sodium.h>
 
+#include <chrono>
 #include <stdexcept>
 
 namespace osuCrypto
 {
-	using boost::multiprecision::cpp_int;
+	constexpr u64 Kemeleon::n;
+	constexpr u64 Kemeleon::q;
+	constexpr u64 Kemeleon::rhoBytes;
 
 	namespace
 	{
-		// We only need the bit length to decide whether VectorEncode overflows its target size
-		u64 bitLen(cpp_int x)
+		using Clock = std::chrono::steady_clock;
+
+		// Buffered RNG for cheaper bounded picks
+		class WordSampler
 		{
-			u64 n = 0;
-			while (x != 0)
+		public:
+			u32 next(u32 bound)
 			{
-				x >>= 1;
-				++n;
+				if (bound == 0)
+				{
+					throw std::runtime_error("Kemeleon sampler got zero bound");
+				}
+
+				const u32 lim = static_cast<u32>(-bound) % bound;
+				for (;;)
+				{
+					const u32 x = nextWord();
+					if (x >= lim)
+					{
+						return x % bound;
+					}
+				}
+			}
+
+		private:
+			u32 nextWord()
+			{
+				if (mPos == mBuf.size())
+				{
+					randombytes_buf(mBuf.data(), mBuf.size() * sizeof(u32));
+					mPos = 0;
+				}
+
+				return mBuf[mPos++];
+			}
+
+			std::array<u32, 1024> mBuf{};
+			size_t mPos = mBuf.size();
+		};
+
+		u64 bitLen(const mpz_t x)
+		{
+			if (mpz_sgn(x) == 0)
+			{
+				return 0;
+			}
+
+			u64 n = static_cast<u64>(mpz_sizeinbase(x, 2));
+			while (n > 0 && mpz_tstbit(x, n - 1) == 0)
+			{
+				--n;
 			}
 
 			return n;
 		}
 	}
 
-	Kemeleon::Kemeleon(MlKem::Mode mode)
-		: mKem(mode)
-		, mInfo(makeInfo(mode))
-		, mPreimages(makePreimageTable(mInfo.du))
-	{
-	}
+		Kemeleon::Kemeleon(MlKem::Mode mode)
+			: mKem(mode)
+			, mInfo(makeInfo(mode))
+			// Mode-local preimage table
+			, mPreimages(makePreimageTable(mInfo.du))
+		{
+		}
 
-	void Kemeleon::setMode(MlKem::Mode mode)
-	{
-		mKem.setMode(mode);
-		mInfo = makeInfo(mode);
-		mPreimages = makePreimageTable(mInfo.du);
-	}
+		void Kemeleon::setMode(MlKem::Mode mode)
+		{
+			mKem.setMode(mode);
+			mInfo = makeInfo(mode);
+			// Rebuild the flat table on mode change
+			mPreimages = makePreimageTable(mInfo.du);
+		}
 
 	MlKem::Mode Kemeleon::mode() const
 	{
@@ -96,46 +144,79 @@ namespace osuCrypto
 
 	bool Kemeleon::encodeCipher(span<const u8> cipher, std::vector<u8>& out) const
 	{
+		return encodeCipherImpl(cipher, out, nullptr);
+	}
+
+	bool Kemeleon::encodeCipherProfiled(span<const u8> cipher, std::vector<u8>& out, EncodeCipherStats& stats) const
+	{
+		return encodeCipherImpl(cipher, out, &stats);
+	}
+
+	bool Kemeleon::encodeCipherImpl(span<const u8> cipher, std::vector<u8>& out, EncodeCipherStats* stats) const
+	{
 		if (cipher.size() != rawCipherBytes())
 		{
 			throw std::invalid_argument("Kemeleon cipher has unexpected size");
 		}
 
+		if (stats)
+		{
+			++stats->tries;
+		}
+
 		std::vector<u16> uComp;
 		// Split c into c1 and c2
+		auto t0 = Clock::now();
 		unpackBits(cipher.subspan(0, mInfo.c1Bytes), mInfo.du, mInfo.vecSize, uComp);
-
-		std::vector<u16> u(mInfo.vecSize);
-		for (u64 i = 0; i < mInfo.vecSize; ++i)
+		auto t1 = Clock::now();
+		if (stats)
 		{
-			// Pick a random preimage for each compressed c1 value
-			const u16 want = uComp[i];
-			u[i] = pickPreimage(want);
+			stats->unpackNs += static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
 		}
 
 		std::vector<u8> r;
 		// r <- VectorEncode(u)
-		if (!encodeVec(u, mInfo.vecBits, r))
+		const bool pickOk = stats
+			? encodePickedVecProfiled(uComp, mInfo.vecBits, r, *stats)
+			: encodePickedVec(uComp, mInfo.vecBits, r);
+		if (!pickOk)
 		{
+			if (stats)
+			{
+				++stats->overflowFails;
+			}
 			out.clear();
 			return false;
 		}
 
-		std::vector<u16> c2;
-		unpackBits(cipher.subspan(mInfo.c1Bytes, mInfo.c2Bytes), mInfo.dv, n, c2);
-		for (u64 i = 0; i < c2.size(); ++i)
+		// No temp c2 vector here
+		t0 = Clock::now();
+		if (rejectZeroEntries(cipher.subspan(mInfo.c1Bytes, mInfo.c2Bytes), mInfo.dv, n))
 		{
-			// Reject some zero entries in c2
-			if (c2[i] == 0 && shouldRejectZero(mInfo.dv))
+			if (stats)
 			{
-				out.clear();
-				return false;
+				const auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - t0).count();
+				stats->rejectNs += static_cast<u64>(dt);
+				++stats->zeroFails;
 			}
+			out.clear();
+			return false;
+		}
+		t1 = Clock::now();
+		if (stats)
+		{
+			stats->rejectNs += static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
 		}
 
+		t0 = Clock::now();
 		out.resize(codeCipherBytes());
 		std::copy(r.begin(), r.end(), out.begin());
 		std::copy(cipher.begin() + mInfo.c1Bytes, cipher.end(), out.begin() + mInfo.vecBytes);
+		t1 = Clock::now();
+		if (stats)
+		{
+			stats->outputNs += static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+		}
 		return true;
 	}
 
@@ -225,16 +306,16 @@ namespace osuCrypto
 		info.c2Bytes = info.dv * n / 8;
 		info.vecSize = info.k * n;
 
-		cpp_int top = 1;
-		for (u64 i = 0; i < info.vecSize; ++i)
-		{
-			top *= q;
-		}
-		top += 1;
+		// GMP power once per mode
+		mpz_t top;
+		mpz_init(top);
+		mpz_ui_pow_ui(top, q, info.vecSize);
+		mpz_add_ui(top, top, 1);
 
 		// Size of the VectorEncode output
 		info.vecBits = bitLen(top) - 1;
 		info.vecBytes = (info.vecBits + 7) / 8;
+		mpz_clear(top);
 		return info;
 	}
 
@@ -242,11 +323,33 @@ namespace osuCrypto
 	{
 		const u64 scale = 1ull << bitsPerValue;
 		PreimageTable table;
-		table.vals.resize(scale);
+		// Flat layout for tighter cache use
+		table.offsets.resize(scale);
+		table.counts.resize(scale);
+
+		std::vector<u16> counts(scale, 0);
+		for (u16 x = 0; x < q; ++x)
+		{
+			++counts[compressValue(x, bitsPerValue)];
+		}
+
+		u16 offset = 0;
+		for (u64 i = 0; i < scale; ++i)
+		{
+			table.offsets[i] = offset;
+			table.counts[i] = counts[i];
+			offset = static_cast<u16>(offset + counts[i]);
+		}
+
+		table.vals.resize(offset);
+		std::vector<u16> used(scale, 0);
 
 		for (u16 x = 0; x < q; ++x)
 		{
-			table.vals[compressValue(x, bitsPerValue)].push_back(x);
+			const u16 idx = compressValue(x, bitsPerValue);
+			const u16 pos = static_cast<u16>(table.offsets[idx] + used[idx]);
+			table.vals[pos] = x;
+			++used[idx];
 		}
 
 		return table;
@@ -353,31 +456,140 @@ namespace osuCrypto
 
 	bool Kemeleon::encodeVec(span<const u16> in, u64 bits, std::vector<u8>& out)
 	{
-		cpp_int x = 0;
+		// GMP path instead of cpp_int
+		mpz_t x;
+		mpz_init_set_ui(x, 0);
 		for (u64 i = in.size(); i-- > 0;)
 		{
 			// Build the base-q integer from the vector
-			x *= q;
-			x += in[i];
+			mpz_mul_ui(x, x, q);
+			mpz_add_ui(x, x, in[i]);
 		}
 
 		if (bitLen(x) > bits)
 		{
+			mpz_clear(x);
 			out.clear();
 			return false;
 		}
 
 		out.assign((bits + 7) / 8, 0);
-		for (u64 i = 0; i < out.size(); ++i)
-		{
-			out[i] = static_cast<u8>((x >> (8 * i)) & 0xFF);
-		}
+		size_t wrote = 0;
+		mpz_export(out.data(), &wrote, -1, 1, 0, 0, x);
 
 		if (bits % 8 != 0)
 		{
 			out.back() &= static_cast<u8>((1u << (bits % 8)) - 1);
 		}
 
+		mpz_clear(x);
+		return true;
+	}
+
+	bool Kemeleon::encodePickedVec(span<const u16> in, u64 bits, std::vector<u8>& out) const
+	{
+		// Stream picks into the GMP state
+		WordSampler sampler;
+		mpz_t x;
+		mpz_init_set_ui(x, 0);
+		for (u64 i = in.size(); i-- > 0;)
+		{
+			// Pick a random preimage for each compressed c1 value
+			const u16 want = in[i];
+			if (want >= mPreimages.counts.size())
+			{
+				mpz_clear(x);
+				throw std::runtime_error("Kemeleon preimage set is empty");
+			}
+
+			const u16 count = mPreimages.counts[want];
+			if (count == 0)
+			{
+				mpz_clear(x);
+				throw std::runtime_error("Kemeleon preimage set is empty");
+			}
+
+			const u16 offset = mPreimages.offsets[want];
+			const u16 val = mPreimages.vals[offset + sampler.next(count)];
+			mpz_mul_ui(x, x, q);
+			mpz_add_ui(x, x, val);
+		}
+
+		if (bitLen(x) > bits)
+		{
+			mpz_clear(x);
+			out.clear();
+			return false;
+		}
+
+		out.assign((bits + 7) / 8, 0);
+		size_t wrote = 0;
+		mpz_export(out.data(), &wrote, -1, 1, 0, 0, x);
+
+		if (bits % 8 != 0)
+		{
+			out.back() &= static_cast<u8>((1u << (bits % 8)) - 1);
+		}
+
+		mpz_clear(x);
+		return true;
+	}
+
+	bool Kemeleon::encodePickedVecProfiled(span<const u16> in, u64 bits, std::vector<u8>& out, EncodeCipherStats& stats) const
+	{
+		// Same path with split timings
+		WordSampler sampler;
+		mpz_t x;
+		mpz_init_set_ui(x, 0);
+		for (u64 i = in.size(); i-- > 0;)
+		{
+			auto t0 = Clock::now();
+			const u16 want = in[i];
+			if (want >= mPreimages.counts.size())
+			{
+				mpz_clear(x);
+				throw std::runtime_error("Kemeleon preimage set is empty");
+			}
+
+			const u16 count = mPreimages.counts[want];
+			if (count == 0)
+			{
+				mpz_clear(x);
+				throw std::runtime_error("Kemeleon preimage set is empty");
+			}
+
+			const u16 offset = mPreimages.offsets[want];
+			const u16 val = mPreimages.vals[offset + sampler.next(count)];
+			auto t1 = Clock::now();
+			stats.pickNs += static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+
+			t0 = Clock::now();
+			mpz_mul_ui(x, x, q);
+			mpz_add_ui(x, x, val);
+			t1 = Clock::now();
+			stats.mpzNs += static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+		}
+
+		if (bitLen(x) > bits)
+		{
+			mpz_clear(x);
+			out.clear();
+			return false;
+		}
+
+		auto t0 = Clock::now();
+		out.assign((bits + 7) / 8, 0);
+		size_t wrote = 0;
+		mpz_export(out.data(), &wrote, -1, 1, 0, 0, x);
+
+		if (bits % 8 != 0)
+		{
+			out.back() &= static_cast<u8>((1u << (bits % 8)) - 1);
+		}
+		auto t1 = Clock::now();
+		stats.mpzNs += static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+
+		mpz_clear(x);
 		return true;
 	}
 
@@ -399,39 +611,69 @@ namespace osuCrypto
 			}
 		}
 
-		cpp_int x = 0;
-		for (u64 i = in.size(); i-- > 0;)
-		{
-			x <<= 8;
-			x += in[i];
-		}
+		// GMP import plus small-int division
+		mpz_t x;
+		mpz_t qx;
+		mpz_init(x);
+		mpz_init(qx);
+		mpz_import(x, in.size(), -1, 1, 0, 0, in.data());
 
 		out.resize(count);
 		for (u64 i = 0; i < count; ++i)
 		{
 			// Read one base-q digit at a time
-			out[i] = static_cast<u16>(x % q);
-			x /= q;
+			out[i] = static_cast<u16>(mpz_tdiv_q_ui(qx, x, q));
+			mpz_swap(x, qx);
 		}
 
-		return x == 0;
+		const bool ok = mpz_sgn(x) == 0;
+		mpz_clear(qx);
+		mpz_clear(x);
+		return ok;
 	}
 
-		u16 Kemeleon::pickPreimage(u16 want) const
+	u16 Kemeleon::pickPreimage(u16 want) const
+	{
+		if (want >= mPreimages.counts.size())
 		{
-			if (want >= mPreimages.vals.size())
-			{
-				throw std::runtime_error("Kemeleon preimage set is empty");
-			}
-
-			const auto& hits = mPreimages.vals[want];
-			if (hits.empty())
-			{
-				throw std::runtime_error("Kemeleon preimage set is empty");
-			}
-
-			return hits[randombytes_uniform(static_cast<u32>(hits.size()))];
+			throw std::runtime_error("Kemeleon preimage set is empty");
 		}
+
+		const u16 count = mPreimages.counts[want];
+		if (count == 0)
+		{
+			throw std::runtime_error("Kemeleon preimage set is empty");
+		}
+
+		const u16 offset = mPreimages.offsets[want];
+		const u32 pick = randombytes_uniform(static_cast<u32>(count));
+		return mPreimages.vals[offset + pick];
+	}
+
+	bool Kemeleon::rejectZeroEntries(span<const u8> src, u64 bitsPerValue, u64 count)
+	{
+		// Scan packed c2 in place
+		u64 bitPos = 0;
+		for (u64 i = 0; i < count; ++i)
+		{
+			u16 x = 0;
+			for (u64 j = 0; j < bitsPerValue; ++j)
+			{
+				const u64 pos = bitPos + j;
+				const u8 bit = (src[pos / 8] >> (pos % 8)) & 1;
+				x |= static_cast<u16>(bit) << j;
+			}
+
+			if (x == 0 && shouldRejectZero(bitsPerValue))
+			{
+				return true;
+			}
+
+			bitPos += bitsPerValue;
+		}
+
+		return false;
+	}
 
 	bool Kemeleon::shouldRejectZero(u64 bitsPerValue)
 	{

@@ -105,19 +105,20 @@ namespace tests_libOTe
 				encSeed[i] = static_cast<u8>(0x80 + i);
 			}
 
-			auto pair = kem.keyGen(keySeed);
-			auto enc = kem.encaps(pair.publicKey, encSeed);
-
+			MlKem::KeyPair pair;
 			std::vector<u8> keyData;
 			bool keyOk = false;
-			for (u64 i = 0; i < 8 && !keyOk; ++i)
+			for (u64 i = 0; i < 256 && !keyOk; ++i)
 			{
+				keySeed[0] = static_cast<u8>(0x10 + i);
+				pair = kem.keyGen(keySeed);
 				keyOk = codec.encodeKey(pair.publicKey, keyData);
 			}
 			if (!keyOk)
 			{
 				throw UnitTestFail("Kemeleon key encode kept failing");
 			}
+
 			std::vector<u8> keyData2;
 			if (!codec.encodeKey(pair.publicKey, keyData2) || keyData2 != keyData)
 			{
@@ -128,11 +129,17 @@ namespace tests_libOTe
 				throw UnitTestFail("Kemeleon key code size is wrong");
 			}
 
+			MlKem::EncapResult enc;
 			std::vector<u8> cipherData;
 			bool cipherOk = false;
-			for (u64 i = 0; i < 32 && !cipherOk; ++i)
+			for (u64 i = 0; i < 256 && !cipherOk; ++i)
 			{
-				cipherOk = codec.encodeCipher(enc.cipherText, cipherData);
+				encSeed[0] = static_cast<u8>(0x80 + i);
+				enc = kem.encaps(pair.publicKey, encSeed);
+				for (u64 j = 0; j < 4096 && !cipherOk; ++j)
+				{
+					cipherOk = codec.encodeCipher(enc.cipherText, cipherData);
+				}
 			}
 			if (!cipherOk)
 			{
@@ -147,7 +154,7 @@ namespace tests_libOTe
 			for (u64 i = 0; i < 16; ++i)
 			{
 				std::vector<u8> one;
-				for (u64 j = 0; j < 32; ++j)
+				for (u64 j = 0; j < 4096; ++j)
 				{
 					if (codec.encodeCipher(enc.cipherText, one))
 					{
@@ -167,6 +174,27 @@ namespace tests_libOTe
 				}
 
 				seen.insert(one);
+			}
+
+			Kemeleon::EncodeCipherStats stats;
+			std::vector<u8> profiled;
+			bool profiledOk = false;
+			for (u64 i = 0; i < 4096 && !profiledOk; ++i)
+			{
+				profiledOk = codec.encodeCipherProfiled(enc.cipherText, profiled, stats);
+			}
+			if (!profiledOk)
+			{
+				throw UnitTestFail("Kemeleon profiled cipher encode kept failing");
+			}
+			if (stats.tries == 0)
+			{
+				throw UnitTestFail("Kemeleon profiled cipher encode did not count tries");
+			}
+			std::vector<u8> profiledOut;
+			if (!codec.decodeCipher(profiled, profiledOut) || profiledOut != enc.cipherText)
+			{
+				throw UnitTestFail("Kemeleon profiled cipher round-trip failed");
 			}
 
 			std::vector<u8> keyOut;

@@ -11,6 +11,18 @@ namespace osuCrypto
 	class Kemeleon
 	{
 	public:
+		struct EncodeCipherStats
+		{
+			u64 unpackNs = 0;
+			u64 pickNs = 0;
+			u64 mpzNs = 0;
+			u64 outputNs = 0;
+			u64 rejectNs = 0;
+			u64 tries = 0;
+			u64 overflowFails = 0;
+			u64 zeroFails = 0;
+		};
+
 		explicit Kemeleon(MlKem::Mode mode = MlKem::Mode::MlKem768);
 
 		void setMode(MlKem::Mode mode);
@@ -24,6 +36,7 @@ namespace osuCrypto
 
 		bool encodeKey(span<const u8> key, std::vector<u8>& out) const;
 		bool encodeCipher(span<const u8> cipher, std::vector<u8>& out) const;
+		bool encodeCipherProfiled(span<const u8> cipher, std::vector<u8>& out, EncodeCipherStats& stats) const;
 
 		bool decodeKey(span<const u8> data, std::vector<u8>& key) const;
 		bool decodeCipher(span<const u8> data, std::vector<u8>& cipher) const;
@@ -44,7 +57,10 @@ namespace osuCrypto
 
 		struct PreimageTable
 		{
-			std::vector<std::vector<u16>> vals;
+			// Flat preimage table for cache-friendly picks
+			std::vector<u16> vals;
+			std::vector<u16> offsets;
+			std::vector<u16> counts;
 		};
 
 		// ML-KEM ring constants
@@ -69,15 +85,19 @@ namespace osuCrypto
 		static u16 compressValue(u16 x, u64 bitsPerValue);
 		static u16 decompressValue(u16 x, u64 bitsPerValue);
 
-		// Figure 3 vector codec
+		// GMP vector codec
 		static bool encodeVec(span<const u16> in, u64 bits, std::vector<u8>& out);
 		static bool decodeVec(span<const u8> in, u64 bits, u64 count, std::vector<u16>& out);
+		bool encodePickedVec(span<const u16> in, u64 bits, std::vector<u8>& out) const;
+		bool encodePickedVecProfiled(span<const u16> in, u64 bits, std::vector<u8>& out, EncodeCipherStats& stats) const;
 
-		// Random preimage sampling
+		// Flat table sampling
 		u16 pickPreimage(u16 want) const;
 
-		// c2 rejection step∂
+		// In-place c2 scan
+		static bool rejectZeroEntries(span<const u8> src, u64 bitsPerValue, u64 count);
 		static bool shouldRejectZero(u64 bitsPerValue);
+		bool encodeCipherImpl(span<const u8> cipher, std::vector<u8>& out, EncodeCipherStats* stats) const;
 
 		MlKem mKem;
 		Info mInfo;
