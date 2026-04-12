@@ -7,6 +7,9 @@
 #include "libOTe_Tests/OT_Tests.h"
 #include "libOTe_Tests/NcoOT_Tests.h"
 #include "libOTe_Tests/AknOt_Tests.h"
+#include "obf-mlkem/Kemeleon_Tests.h"
+#include "obf-mlkem/MlKem_Tests.h"
+#include "obf-mlkem/ObfSession_Tests.h"
 
 
 using namespace osuCrypto;
@@ -54,6 +57,9 @@ namespace tests_libOTe
         run("LinearCode_subBlock_Test_Impl           ", LinearCode_subBlock_Test_Impl);
         run("LinearCode_repetition_Test_Impl         ", LinearCode_repetition_Test_Impl);
         run("NaorPinkasOt_Test                       ", NaorPinkasOt_Test_Impl);
+        run("MlKem_Backend_Test                      ", MlKem_Backend_Test_Impl);
+        run("Kemeleon_Test                           ", Kemeleon_Test_Impl);
+        run("ObfSession_Test                         ", ObfSession_Test_Impl);
     }
 
 

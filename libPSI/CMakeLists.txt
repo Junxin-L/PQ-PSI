@@ -7,6 +7,9 @@
 ##############################################
 set(NTL_Lib_Dirs "${NTL_Dirs}src/")
 set(NTL_Include_Dirs "${NTL_Dirs}include/")
+if(APPLE AND EXISTS "${NTL_Dirs}/lib/")
+  set(NTL_Lib_Dirs "${NTL_Dirs}lib/")
+endif()
 
 # default location for NTL
 #set(NTL_LIB "${NTL_Lib_Dirs}nnnnlibntl.a")
@@ -39,6 +42,9 @@ message(STATUS "NTL  ${NTL_Lib_Dirs}")
 ##############################################
 set(GMP_Lib_Dirs "${GMP_Dirs}src/")
 set(GMP_Include_Dirs "${GMP_Dirs}include/")
+if(APPLE AND EXISTS "${GMP_Dirs}/lib/")
+  set(GMP_Lib_Dirs "${GMP_Dirs}lib/")
+endif()
   find_library(
     GMP_LIB 
     NAMES gmp libgmp.a  
@@ -65,21 +71,21 @@ message(STATUS "GMP  ${GMP_Lib_Dirs}")
 ##############################################
 set(GF2X_Lib_Dirs "${GF2X_Dirs}lib/")
 set(GF2X_Include_Dirs "${GF2X_Dirs}include/")
+if(EXISTS "${GF2X_Include_Dirs}")
   find_library(
     GF2X_LIB 
     names gf2x libgf2x.a  
     paths "${GF2X_Lib_Dirs}")
   
-  # if we still cant fint it, throw an error
   if(NOT GF2X_LIB) 
-	if(EXISTS "${GF2X_Lib_Dirs}libgf2x.a")
-		set(GF2X_LIB "${GF2X_Lib_Dirs}libgf2x.a")
-	else()
-	   message(${GF2X_LIB})
-		message(fatal_error "failed to find gf2x at ${GF2X_Lib_Dirs} or at system locations." )
-	endif()
+    if(EXISTS "${GF2X_Lib_Dirs}libgf2x.a")
+      set(GF2X_LIB "${GF2X_Lib_Dirs}libgf2x.a")
+    else()
+      message(${GF2X_LIB})
+      message(fatal_error "failed to find gf2x at ${GF2X_Lib_Dirs} or at system locations." )
+    endif()
   endif()
-#endif()
+endif()
 
 message(status "gf2x  ${GF2X_LIB}")
 message(status "gf2x ${GF2X_Include_Dirs}")
@@ -90,10 +96,18 @@ message(status "gf2x ${GF2X_Lib_Dirs}")
 ##############################################
 set(SODIUM_Lib_Dirs "${SODIUM_Dirs}bin/lib/")
 set(SODIUM_Include_Dirs "${SODIUM_Dirs}bin/include/")
+if(APPLE AND EXISTS "${SODIUM_Dirs}/lib/")
+  set(SODIUM_Lib_Dirs "${SODIUM_Dirs}lib/")
+  set(SODIUM_Include_Dirs "${SODIUM_Dirs}include/")
+endif()
+if(APPLE AND EXISTS "${SODIUM_Lib_Dirs}libsodium.dylib")
+  set(SODIUM_LIB "${SODIUM_Lib_Dirs}libsodium.dylib")
+else()
   find_library(
     SODIUM_LIB 
-    names sodium libsodium.a  
+    names sodium libsodium libsodium.dylib libsodium.a
     paths "${SODIUM_Lib_Dirs}")
+endif()
   
   # if we still cant fint it, throw an error
   if(NOT SODIUM_LIB) 
@@ -120,7 +134,30 @@ set(Boost_USE_STATIC_LIBS        ON) # only find static libs
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME     ON)
 
-find_package(Boost  COMPONENTS system thread)
+find_path(
+  Boost_INCLUDE_DIR
+  NAMES boost/version.hpp
+  HINTS "${BOOST_ROOT}/include" "/usr/local/include" "/opt/homebrew/include")
+
+find_library(
+  Boost_SYSTEM_LIB
+  NAMES boost_system libboost_system.a
+  HINTS "${BOOST_ROOT}/lib" "/usr/local/lib" "/opt/homebrew/lib")
+
+find_library(
+  Boost_THREAD_LIB
+  NAMES boost_thread libboost_thread.a
+  HINTS "${BOOST_ROOT}/lib" "/usr/local/lib" "/opt/homebrew/lib")
+
+set(Boost_LIBRARIES ${Boost_THREAD_LIB})
+if(Boost_SYSTEM_LIB)
+  list(APPEND Boost_LIBRARIES ${Boost_SYSTEM_LIB})
+endif()
+set(Boost_FOUND TRUE)
+
+if(NOT Boost_INCLUDE_DIR OR NOT Boost_THREAD_LIB)
+  set(Boost_FOUND FALSE)
+endif()
 
 if(Boost_FOUND)
   message( "Found Boost at ${Boost_LIBRARIES}")
@@ -163,6 +200,14 @@ find_library(
     NAMES cryptoTools
     HINTS "${libOTe_Dirs}/lib/")
 
+if(TARGET libOTe)
+  set(libOTe_LIB libOTe)
+endif()
+
+if(TARGET cryptoTools)
+  set(cryptoTools_LIB cryptoTools)
+endif()
+
 	
 #############################################
 #              Build libPSI                #
@@ -172,14 +217,19 @@ file(GLOB_RECURSE SRCS *.cpp)
  
 
 add_library(libPSI ${SRCS})
+target_sources(libPSI PRIVATE ${CMAKE_SOURCE_DIR}/libPSI/Tools/obf-mlkem/native/mlkem_native_all.c)
 
 
 target_include_directories(libPSI PUBLIC ${Boost_INCLUDE_DIR}) 
 target_include_directories(libPSI PUBLIC ${NTL_Include_Dirs}) 
 target_include_directories(libPSI PUBLIC ${GMP_Include_Dirs})
-target_include_directories(libPSI PUBLIC ${GF2X_Include_Dirs})
+if(EXISTS "${GF2X_Include_Dirs}")
+  target_include_directories(libPSI PUBLIC ${GF2X_Include_Dirs})
+endif()
 target_include_directories(libPSI PUBLIC ${SODIUM_Include_Dirs})
 target_include_directories(libPSI PUBLIC ${CMAKE_SOURCE_DIR}/libPSI) 
 target_include_directories(libPSI PUBLIC ${CMAKE_SOURCE_DIR}/libPSI) 
+target_include_directories(libPSI PRIVATE ${CMAKE_SOURCE_DIR}/libPSI/Tools/obf-mlkem)
+target_include_directories(libPSI PRIVATE ${CMAKE_SOURCE_DIR}/libPSI/Tools/obf-mlkem/native)
 
 target_link_libraries(libPSI ${libOTe_LIB}  ${cryptoTools_LIB} ${MIRACL_LIB}  ${Boost_LIBRARIES} ${NTL_LIB} ${GMP_LIB} ${GF2X_LIB} ${SODIUM_LIB})
