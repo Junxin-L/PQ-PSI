@@ -69,6 +69,13 @@ namespace osuCrypto
 
 			return n;
 		}
+
+		u8 hashByte(span<const u8> data)
+		{
+			u8 out = 0;
+			crypto_generichash(&out, 1, data.data(), data.size(), nullptr, 0);
+			return out;
+		}
 	}
 
 		Kemeleon::Kemeleon(MlKem::Mode mode)
@@ -139,6 +146,8 @@ namespace osuCrypto
 		out.resize(codeKeyBytes());
 		std::copy(key.begin() + mInfo.polyBytes, key.end(), out.begin());
 		std::copy(r.begin(), r.end(), out.begin() + rhoBytes);
+		// Fill the spare key bits so the last byte looks less structured
+		fillKeyHighBits(key, out);
 		return true;
 	}
 
@@ -228,9 +237,13 @@ namespace osuCrypto
 			return false;
 		}
 
+		std::vector<u8> r(data.begin() + rhoBytes, data.begin() + rhoBytes + mInfo.vecBytes);
+		// Drop the spare key bits before VectorDecode
+		clearKeyHighBits(r);
+
 		std::vector<u16> t;
 		// t <- VectorDecode(r)
-		if (!decodeVec(data.subspan(rhoBytes, mInfo.vecBytes), mInfo.vecBits, mInfo.vecSize, t))
+		if (!decodeVec(r, mInfo.vecBits, mInfo.vecSize, t))
 		{
 			key.clear();
 			return false;
@@ -243,6 +256,39 @@ namespace osuCrypto
 		std::copy(packedT.begin(), packedT.end(), key.begin());
 		std::copy(data.begin(), data.begin() + rhoBytes, key.begin() + mInfo.polyBytes);
 		return true;
+	}
+
+	u8 Kemeleon::keyHighMask() const
+	{
+		const u64 rem = mInfo.vecBits % 8;
+		if (rem == 0)
+		{
+			return 0;
+		}
+
+		return static_cast<u8>(~((1u << rem) - 1));
+	}
+
+	void Kemeleon::fillKeyHighBits(span<const u8> key, std::vector<u8>& out) const
+	{
+		const u8 mask = keyHighMask();
+		if (mask == 0)
+		{
+			return;
+		}
+
+		out[rhoBytes + mInfo.vecBytes - 1] |= hashByte(key) & mask;
+	}
+
+	void Kemeleon::clearKeyHighBits(std::vector<u8>& in) const
+	{
+		const u8 mask = keyHighMask();
+		if (mask == 0 || in.empty())
+		{
+			return;
+		}
+
+		in.back() &= static_cast<u8>(~mask);
 	}
 
 	bool Kemeleon::decodeCipher(span<const u8> data, std::vector<u8>& cipher) const

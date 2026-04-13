@@ -91,6 +91,11 @@ namespace osuCrypto
 		bool encodePickedVec(span<const u16> in, u64 bits, std::vector<u8>& out) const;
 		bool encodePickedVecProfiled(span<const u16> in, u64 bits, std::vector<u8>& out, EncodeCipherStats& stats) const;
 
+		// Extra key bits above vecBits
+		u8 keyHighMask() const;
+		void fillKeyHighBits(span<const u8> key, std::vector<u8>& out) const;
+		void clearKeyHighBits(std::vector<u8>& in) const;
+
 		// Flat table sampling
 		u16 pickPreimage(u16 want) const;
 

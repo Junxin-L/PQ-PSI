@@ -76,9 +76,14 @@ namespace tests_libOTe
 			std::vector<u8> badKey = keyData;
 			std::vector<u8> out;
 			badKey[codec.codeKeyBytes() - 1] |= static_cast<u8>(1u << (8 - spare));
-			if (codec.decodeKey(badKey, out))
+			std::vector<u8> keyOut;
+			if (!codec.decodeKey(keyData, keyOut))
 			{
-				throw UnitTestFail("Kemeleon accepted key data with bad top bits");
+				throw UnitTestFail("Kemeleon failed on clean key data");
+			}
+			if (!codec.decodeKey(badKey, out) || out != keyOut)
+			{
+				throw UnitTestFail("Kemeleon key decode did not ignore spare top bits");
 			}
 
 			std::vector<u8> badCipher = cipherData;
