@@ -149,3 +149,89 @@ That rebuilds the static test library and verifies that the current `obf-mlkem` 
 In the current repo layout, the `Tests/` code builds into `libTests`. There is not a standalone `obf-mlkem` test.
 
 
+## Benchmark
+
+There is also a small benchmark for the `MlKem` and `Kemeleon` parts.
+
+The benchmark source is:
+
+- [Tests/obf-mlkem/ObfMlKem_Bench.cpp](.../PQ-PSI/Tests/obf-mlkem/ObfMlKem_Bench.cpp)
+
+### What it measures
+
+For each mode:
+
+- `ML-KEM-512`
+- `ML-KEM-768`
+- `ML-KEM-1024`
+
+it measures:
+
+- `keyGen`
+- `encaps`
+- `decaps`
+- `encodeKey`
+- `decodeKey`
+- `encodeCipher`
+- `decodeCipher`
+
+For `encodeCipher` it also prints a breakdown:
+
+- average tries per successful encoding
+- overflow failures
+- zero-rejection failures
+- time spent in:
+  - unpack
+  - pick
+  - GMP work
+  - reject
+  - output copy
+
+### Benchmark config
+
+The current benchmark uses:
+
+- key search tries: `128`
+- cipher warmup tries: `32768`
+- cipher bench tries: `4096`
+- KEM rounds: `200`
+- codec rounds: `200`
+
+It also prints the raw and coded sizes for each ML-KEM mode.
+
+### How to run it
+
+From the repo root:
+
+```bash
+arch -x86_64 /bin/zsh -lc 'eval "$(/usr/local/bin/brew shellenv)" && cmake --build build-x86 --target obf_mlkem_bench -j1 && ./bin/obf_mlkem_bench'
+```
+
+### Output file
+
+The benchmark writes a report to:
+
+- [build-x86/obf_mlkem_benchmark.txt](.../PQ-PSI/build-x86/obf_mlkem_benchmark.txt)
+
+The report includes:
+
+- local run time
+- system string
+- binary architecture
+- build kind
+- benchmark configuration
+- per-mode sizes
+- per-mode benchmark results
+
+### Environment note
+
+The numbers we have right now come from the x86_64 Rosetta path on this Apple Silicon Mac.
+
+So:
+
+- they are useful for comparing versions of this implementation
+- they are not ideal “native x86 server” numbers
+- they are not ideal “native Apple Silicon” numbers either
+
+If you want to report final performance numbers in a paper or presentation, it would be better to rerun the benchmark on the actual target machine and save a fresh report file there.
+
