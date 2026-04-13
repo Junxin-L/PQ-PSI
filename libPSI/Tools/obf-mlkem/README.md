@@ -18,7 +18,7 @@ Right now the useful pieces are:
 
 ## Dependencies
 
-The main dependency here is [thirdparty/mlkem-native](.../PQ-PSI/thirdparty/mlkem-native). That is the actual ML-KEM implementation.
+The main dependency here is [thirdparty/mlkem-native](../../../thirdparty/mlkem-native). That is the actual ML-KEM implementation.
 
 We also use:
 
@@ -65,7 +65,7 @@ The current encoded sizes are:
 
 ## Tests
 
-The tests for this code is under [Tests/obf-mlkem](.../PQ-PSI/Tests/obf-mlkem).
+The tests for this code is under [Tests/obf-mlkem](../../../Tests/obf-mlkem).
 
 They cover:
 
@@ -97,7 +97,7 @@ There is also a small benchmark for the `MlKem` and `Kemeleon` parts.
 
 The source is:
 
-- [Tests/obf-mlkem/ObfMlKem_Bench.cpp](.../PQ-PSI/Tests/obf-mlkem/ObfMlKem_Bench.cpp)
+- [Tests/obf-mlkem/ObfMlKem_Bench.cpp](../../../Tests/obf-mlkem/ObfMlKem_Bench.cpp)
 
 For each mode
 
@@ -143,7 +143,7 @@ arch -x86_64 /bin/zsh -lc 'eval "$(/usr/local/bin/brew shellenv)" && cmake --bui
 
 The benchmark writes a report to:
 
-- [build-x86/obf_mlkem_benchmark.txt](.../PQ-PSI/build-x86/obf_mlkem_benchmark.txt)
+- [build-x86/obf_mlkem_benchmark.txt](../../../build-x86/obf_mlkem_benchmark.txt)
 
 
 ### Current Report
