@@ -115,6 +115,7 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 	//##########################
 
 	u64 okvsTableSize= okvsLengthScale * inputSet.size(); //depending on okvs variant
+	u64 rowOkvsBlkSize = KEM_key_block_size;
 	int s = Keccak_size_bit; //permuation parameter -- need to update if needed
 	ConstructionPermutation P(Keccak_size_bit, KEM_key_size_bit, s, Keccak1600Adapter::pi, Keccak1600Adapter::pi_inv);
 
@@ -137,16 +138,31 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 		std::vector<std::vector<block>> okvsTable(okvsTableSize);
 
 		SimulatedOkvsEncode(inputSet, setValues, okvsTable);
-		chls[myIdx][0]->send(okvsTable.data(), okvsTable.size() * okvsTable[0].size()* sizeof(block)); // send okvs
+
+		 // send okvs
+		std::vector<block> flat(okvsTableSize * rowOkvsBlkSize);
+
+		for (size_t j = 0; j < okvsTableSize; ++j) {
+			std::memcpy(flat.data() + j * rowOkvsBlkSize, okvsTable[j].data(), rowOkvsBlkSize * sizeof(block));
+		}
 
 
-		///receving the second OKVS
+		chls[1][0]->send(flat.data(), flat.size() * sizeof(block));
+		
 
-		std::vector<std::vector<block>> okvsTable2(okvsTableSize);
+		/////receving the second OKVS
+
+		std::vector<std::vector<block>> okvsTable2(okvsTableSize,std::vector<block>(rowOkvsBlkSize));
 		std::vector<std::vector<block>> setValues2(inputSet.size());
 
-		chls[myIdx][0]->recv(okvsTable.data(), okvsTable.size() * okvsTable[0].size() * sizeof(block)); // received the second okvs
-		SimulatedOkvsDecode(okvsTable, inputSet, setValues2);
+		chls[1][0]->recv(flat.data(), flat.size() * sizeof(block));
+		
+		for (size_t j = 0; j < okvsTableSize; ++j) {
+			std::memcpy( okvsTable[j].data(), flat.data() + j * rowOkvsBlkSize, rowOkvsBlkSize * sizeof(block));
+		}
+		
+
+		SimulatedOkvsDecode(okvsTable2, inputSet, setValues2);
 		for (u32 i = 0; i < inputSet.size(); i++)
 		{
 			if (Decaps(recv_sk[i], setValues2[i]))
@@ -157,12 +173,20 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 	}
 	else if (myIdx == 1) //sender
 	{
-		std::vector<std::vector<block>> okvsTable(okvsTableSize);
+		std::vector<block> recv_flat(okvsTableSize * rowOkvsBlkSize);
+		chls[0][0]->recv(recv_flat.data(), recv_flat.size() * sizeof(block));
+
+		std::vector<std::vector<block>> okvsTable(okvsTableSize,
+		std::vector<block>(rowOkvsBlkSize));
+
+		for (size_t j = 0; j < okvsTableSize; ++j) {
+			std::memcpy(okvsTable[j].data(), recv_flat.data() + j * rowOkvsBlkSize, rowOkvsBlkSize * sizeof(block));
+		}
+
 		std::vector<std::vector<block>> setValues(inputSet.size());
 
-		chls[myIdx][0]->recv(okvsTable.data(), okvsTable.size() * okvsTable[0].size() * sizeof(block)); // send okvs
 		
-		SimulatedOkvsDecode(okvsTable,inputSet, setValues);
+	    SimulatedOkvsDecode(okvsTable,inputSet, setValues);
 
 		Encaps(setValues, sender_pk);
 
@@ -180,7 +204,13 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 		std::vector<std::vector<block>> okvsTable2(okvsTableSize); 
 
 		SimulatedOkvsEncode(inputSet, setValues2, okvsTable2);
-		chls[myIdx][0]->send(okvsTable2.data(), okvsTable2.size()* okvsTable2[0].size() * sizeof(block)); // send okvs
+
+		//copy and send the okvs to the sender
+		for (size_t j = 0; j < okvsTableSize; ++j) {
+			std::memcpy(recv_flat.data() + j * rowOkvsBlkSize, okvsTable[j].data(), rowOkvsBlkSize * sizeof(block));
+		}
+		chls[0][0]->send(recv_flat.data(), recv_flat.size() * sizeof(block));
+
 	}
 
 
@@ -213,7 +243,7 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 
 void PqPsi_Test_Main()
 {
-	u64 setSize = 1 << 8, psiSecParam = 40, bitSize = 128;
+	u64 setSize = 1 << 2, psiSecParam = 40, bitSize = 128;
 	PRNG prng(_mm_set_epi32(4253465, 3434565, 234435, 23987045));
 	std::vector<block>mSet(setSize);
 	for (u64 i = 0; i < setSize; ++i)

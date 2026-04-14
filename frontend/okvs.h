@@ -30,11 +30,10 @@ inline void GbfEncode(const std::vector<std::pair<block, std::vector<block>>> ke
 
 
     garbledBF.resize(mBfBitCount);
-    for (size_t i = 0; i < mBfBitCount; i++)
-      for (size_t j = 0; j < key_values[0].second.size(); j++)
-        {
-          garbledBF[i][j] = ZeroBlock;
-        }
+    for (size_t i = 0; i < mBfBitCount; ++i) {
+       // garbledBF[i].resize(key_values[i].second.size());
+        garbledBF[i].assign(key_values[0].second.size(), ZeroBlock);
+    }
 
     PRNG prng(_mm_set_epi32(4253465, 3434565, 234435, 23987045));
 
@@ -100,8 +99,8 @@ inline void GbfEncode(const std::vector<std::pair<block, std::vector<block>>> ke
 
     //filling random for the rest
     for (u64 i = 0; i < garbledBF.size(); ++i)
-        if (eq(garbledBF[i][0], ZeroBlock))
-            for (size_t j = 0; j < key_values[0].second.size(); j++)
+        for (size_t j = 0; j < key_values[0].second.size(); j++)
+            if (eq(garbledBF[i][j], ZeroBlock))
                 garbledBF[i][j] = prng.get<block>();
 
 
@@ -120,7 +119,9 @@ inline  void GbfEncode(const std::vector<block> setKeys, const std::vector<std::
     for (u64 i = 0; i < key_values.size(); ++i)
     {
         memcpy((u8*)&key_values[i].first, (u8*)&setKeys[i], sizeof(block));
-        memcpy((u8*)&key_values[i].second, (u8*)&setValues[i], sizeof(block));
+        key_values[i].second.resize(setValues[i].size());
+        for (u64 j = 0; j < setValues[i].size(); ++j)
+            memcpy((u8*)&key_values[i].second[j], (u8*)&setValues[i][j], sizeof(block));
     }
     //std::cout << setValues[0] << " vs " << key_values[0].second << "\n";
 
@@ -154,6 +155,9 @@ inline  void GbfDecode(const std::vector<std::vector<block>> garbledBF, const st
     {
         //std::cout << "mSetY[" << i << "]= " << mSetY[i] << std::endl;
         //	std::cout << mSetX[i] << std::endl;
+
+        setValues[i].resize(garbledBF[0].size());
+
 
         std::set<u64> idxs;
 

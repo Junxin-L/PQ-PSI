@@ -34,11 +34,9 @@ void usage(const char* argv0)
 
 int main(int argc, char** argv)
 {
-	//OPPRFn_Aug_EmptrySet_Test_Impl();
-	//return 0;
 	//InitDebugPrinting();
 	//Channel_test();
-	permutation_Test();
+	//permutation_Test();
 	PqPsi_Test_Main();
 	return 0;
 	//PolyTest();
