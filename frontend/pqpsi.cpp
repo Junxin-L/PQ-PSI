@@ -7,21 +7,42 @@
 #include "okvs.h"
 #include <fstream>
 #include <util.h>
+#include <permutation.h>
 
 
 using namespace osuCrypto;
 
 
 
+void Encaps(std::vector<std::vector<block>>& input, std::vector<kemKey>& out)
+{
+	out.resize(input.size());
 
-void pqpsi(u64 myIdx, u64 setSize, std::vector<block> set)
+	for (size_t i = 0; i < input.size(); ++i) {
+		if (input[i].size() != KEM_key_block_size) {
+			throw std::invalid_argument("Encaps: wrong inner vector size");
+		}
+
+		std::copy(input[i].begin(), input[i].end(), out[i].begin());
+	}
+	//TODO: write Encaps here
+
+}
+
+bool Decaps(kemKey sk, std::vector<block> value)
+{
+	//TODO write the decaps
+	return 1;
+}
+
+void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 {
 	u64  psiSecParam = 40, bitSize = 128, numThreads = 1, nParties = 2;
 	PRNG prng(_mm_set_epi32(4253465, 3434565, 234435, 23987045));
 
 	PRNG prng1(_mm_set_epi32(4253465, myIdx, myIdx, myIdx)); //for test
 	if (myIdx == 0)
-		set[2] = prng1.get<block>();;
+		inputSet[2] = prng1.get<block>();;
 
 
 	std::string name("psi");
@@ -64,14 +85,103 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> set)
 
 
 	std::vector<std::thread>  pThrds(nParties);
+	std::vector<u32> mIntersection;
 
+	
+	auto start = timer.setTimePoint("start");
+
+	//##########################
+	//### ML-KEM key generations
+	//##########################
+
+	std::vector<kemKey> recv_sk(inputSet.size());
+	std::vector<kemKey> recv_pk(inputSet.size());
+	std::vector<kemKey> sender_pk(inputSet.size());
+	
+	for (size_t i = 0; i < inputSet.size(); i++) //TODO: get the real keys from KEM
+	{
+		for (size_t j = 0; j < recv_sk[0].size(); j++)
+		{
+			recv_sk[i][j] = ZeroBlock;
+			recv_pk[i][j] = ZeroBlock;
+			sender_pk[i][j] = ZeroBlock;
+		}
+	
+	}
+
+	
 	//##########################
 	//### OKVS Encoding
 	//##########################
 
-	auto start = timer.setTimePoint("start");
+	u64 okvsTableSize= okvsLengthScale * inputSet.size(); //depending on okvs variant
+	int s = Keccak_size_bit; //permuation parameter -- need to update if needed
+	ConstructionPermutation P(Keccak_size_bit, KEM_key_size_bit, s, Keccak1600Adapter::pi, Keccak1600Adapter::pi_inv);
 
-	
+
+	if (myIdx == 0) //receiver
+	{
+		std::vector<std::vector<block>> setValues;
+		setValues.reserve(recv_pk.size());
+
+
+		for (size_t i = 0; i < recv_pk.size(); i++)
+		{
+			Bits Y = P.encrypt(KemKeyToBits(recv_pk[i])); //permuation
+			std::array<block, KEM_key_block_size> temp = BitsToKemKey(Y);
+			setValues.emplace_back(temp.begin(), temp.end()); 
+
+			//TODO: need to xor with H(key) -- currently, the size is different
+		}
+
+		std::vector<std::vector<block>> okvsTable(okvsTableSize);
+
+		SimulatedOkvsEncode(inputSet, setValues, okvsTable);
+		chls[myIdx][0]->send(okvsTable.data(), okvsTable.size() * okvsTable[0].size()* sizeof(block)); // send okvs
+
+
+		///receving the second OKVS
+
+		std::vector<std::vector<block>> okvsTable2(okvsTableSize);
+		std::vector<std::vector<block>> setValues2(inputSet.size());
+
+		chls[myIdx][0]->recv(okvsTable.data(), okvsTable.size() * okvsTable[0].size() * sizeof(block)); // received the second okvs
+		SimulatedOkvsDecode(okvsTable, inputSet, setValues2);
+		for (u32 i = 0; i < inputSet.size(); i++)
+		{
+			if (Decaps(recv_sk[i], setValues2[i]))
+				mIntersection.push_back(i);
+		}
+
+
+	}
+	else if (myIdx == 1) //sender
+	{
+		std::vector<std::vector<block>> okvsTable(okvsTableSize);
+		std::vector<std::vector<block>> setValues(inputSet.size());
+
+		chls[myIdx][0]->recv(okvsTable.data(), okvsTable.size() * okvsTable[0].size() * sizeof(block)); // send okvs
+		
+		SimulatedOkvsDecode(okvsTable,inputSet, setValues);
+
+		Encaps(setValues, sender_pk);
+
+		std::vector<std::vector<block>> setValues2; //the setValue for the next OKVS
+		setValues2.reserve(sender_pk.size());
+
+		for (size_t i = 0; i < recv_pk.size(); i++) //Simulatable and extraable OKVS
+		{
+			Bits Y = P.encrypt(KemKeyToBits(sender_pk[i])); //permuation
+			std::array<block, KEM_key_block_size> temp = BitsToKemKey(Y);
+			setValues2.emplace_back(temp.begin(), temp.end());
+			//TODO: need to xor with H(key) -- currently, the size is different
+		}
+
+		std::vector<std::vector<block>> okvsTable2(okvsTableSize); 
+
+		SimulatedOkvsEncode(inputSet, setValues2, okvsTable2);
+		chls[myIdx][0]->send(okvsTable2.data(), okvsTable2.size()* okvsTable2[0].size() * sizeof(block)); // send okvs
+	}
 
 
 	auto initDone = timer.setTimePoint("initDone");

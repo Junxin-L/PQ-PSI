@@ -18,6 +18,212 @@
 using namespace osuCrypto;
 
 
+inline void GbfEncode(const std::vector<std::pair<block, std::vector<block>>> key_values, std::vector<std::vector<block>>& garbledBF)
+{
+    u64 setSize = key_values.size();
+    u64 mBfBitCount = okvsLengthScale * setSize; //depending on okvs variant
+    u64 numHashFunctions = okvsHashFunctions; //depending on okvs variant
+
+    std::vector<AES> mBFHasher(numHashFunctions);
+    for (u64 i = 0; i < mBFHasher.size(); ++i)
+        mBFHasher[i].setKey(_mm_set1_epi64x(i));
+
+
+    garbledBF.resize(mBfBitCount);
+    for (size_t i = 0; i < mBfBitCount; i++)
+      for (size_t j = 0; j < key_values[0].second.size(); j++)
+        {
+          garbledBF[i][j] = ZeroBlock;
+        }
+
+    PRNG prng(_mm_set_epi32(4253465, 3434565, 234435, 23987045));
+
+
+    std::vector<std::set<u64>> idxs(setSize);
+    for (u64 i = 0; i < setSize; ++i)
+    {
+        u64 firstFreeIdx(-1);
+        std::vector<block> sum (key_values[0].second.size(), ZeroBlock);
+
+        //std::cout << "input[" << i << "] " << inputs[i] << std::endl;
+
+        //idxs.clear();
+        for (u64 hashIdx = 0; hashIdx < mBFHasher.size(); ++hashIdx)
+        {
+
+            block hashOut = mBFHasher[hashIdx].ecbEncBlock(key_values[i].first);
+            u64& idx = *(u64*)&hashOut;
+            idx %= mBfBitCount;
+            idxs[i].emplace(idx);
+
+            //std::cout << idx << " ";
+        }
+        //std::cout << "\n";
+
+        for (auto idx : idxs[i])
+        {
+            if (eq(garbledBF[idx][0], ZeroBlock))
+            {
+                if (firstFreeIdx == u64(-1))
+                {
+                    firstFreeIdx = idx;
+                    //std::cout << "firstFreeIdx: " << firstFreeIdx << std::endl;
+
+                }
+                else
+                {
+                    for (size_t j = 0; j < key_values[0].second.size(); j++)
+                    {
+                        garbledBF[idx][j] = _mm_set_epi64x(idx, idx);
+                    //	std::cout << coefficients[idx] <<"\n";
+                        sum[j] = sum[j] ^ garbledBF[idx][j];
+                    //std::cout << idx << " " << coefficients[idx] << std::endl;\\
+                    
+                    }
+                }
+            }
+            else
+            {
+                for (size_t j = 0; j < key_values[0].second.size(); j++)
+                    sum[j] = sum[j] ^ garbledBF[idx][j];
+                //std::cout << idx << " " << coefficients[idx] << std::endl;
+            }
+        }
+
+        if (firstFreeIdx != -1)
+            for (size_t j = 0; j < key_values[0].second.size(); j++)
+                garbledBF[firstFreeIdx][j] = sum[j] ^ key_values[i].second[j];
+        //std::cout << firstFreeIdx << " " << coefficients[firstFreeIdx] << std::endl;
+        //std::cout << test << "\n";
+        //std::cout << "sender " << i << " *   " << coefficients[firstFreeIdx] << "    " << firstFreeIdx << std::endl;
+    }
+
+    //filling random for the rest
+    for (u64 i = 0; i < garbledBF.size(); ++i)
+        if (eq(garbledBF[i][0], ZeroBlock))
+            for (size_t j = 0; j < key_values[0].second.size(); j++)
+                garbledBF[i][j] = prng.get<block>();
+
+
+
+    /*std::cout << IoStream::lock;
+    for (u64 i = 0; i < 5; i++)
+        std::cout << coefficients[i] << " - SimulatedOkvsEncode - " << i << std::endl;
+    std::cout << IoStream::unlock;*/
+}
+
+
+inline  void GbfEncode(const std::vector<block> setKeys, const std::vector<std::vector<block>> setValues, std::vector<std::vector<block>>& garbledBF)
+{
+    std::vector<std::pair<block, std::vector<block>>> key_values(setKeys.size());
+
+    for (u64 i = 0; i < key_values.size(); ++i)
+    {
+        memcpy((u8*)&key_values[i].first, (u8*)&setKeys[i], sizeof(block));
+        memcpy((u8*)&key_values[i].second, (u8*)&setValues[i], sizeof(block));
+    }
+    //std::cout << setValues[0] << " vs " << key_values[0].second << "\n";
+
+    GbfEncode(key_values, garbledBF);
+
+    ////simulat the cost of okvs
+    //if (setKeys.size() <= (1 << 12)) //set size =2^12
+    //    this_thread::sleep_for(chrono::milliseconds(52));
+    //else if (setKeys.size() <= (1 << 16)) //set size =2^16
+    //    this_thread::sleep_for(chrono::milliseconds(103));
+    //else if (setKeys.size() <= (1 << 20)) //set size =2^16
+    //    this_thread::sleep_for(chrono::milliseconds(2838));
+    //else
+    //    this_thread::sleep_for(chrono::milliseconds(2838*(setKeys.size()/(1<<20))));
+}
+
+
+inline  void GbfDecode(const std::vector<std::vector<block>> garbledBF, const std::vector<block> setKeys, std::vector<std::vector<block>>& setValues)
+{
+    u64 setSize = setKeys.size();
+    u64 mBfBitCount = okvsLengthScale * setSize;
+    u64 numHashFunctions = okvsHashFunctions;
+
+    std::vector<AES> mBFHasher(numHashFunctions);
+    for (u64 i = 0; i < mBFHasher.size(); ++i)
+        mBFHasher[i].setKey(_mm_set1_epi64x(i));
+
+    setValues.resize(setSize);
+
+    for (u64 i = 0; i < setSize; ++i)
+    {
+        //std::cout << "mSetY[" << i << "]= " << mSetY[i] << std::endl;
+        //	std::cout << mSetX[i] << std::endl;
+
+        std::set<u64> idxs;
+
+        for (u64 hashIdx = 0; hashIdx < mBFHasher.size(); ++hashIdx)
+        {
+            block hashOut = mBFHasher[hashIdx].ecbEncBlock(setKeys[i]);
+            u64& idx = *(u64*)&hashOut;
+            idx %= mBfBitCount;
+            idxs.emplace(idx);
+        }
+
+        for (size_t j = 0; j < garbledBF[0].size(); j++)
+            setValues[i][j] = ZeroBlock;
+
+        for (auto idx : idxs)
+        {
+            ///std::cout << idx << " " << coefficients[idx] << std::endl;
+            for (size_t j = 0; j < garbledBF[0].size(); j++)
+                setValues[i][j] = setValues[i][j] ^ garbledBF[idx][j];
+        }
+
+        //if (i == 0) //for test
+        //	std::cout << mSetY[0] << "\t vs \t" << sum << std::endl;
+    }
+
+    ////simulat the cost of okvs
+    //if (setKeys.size() <= (1 << 12)) //set size =2^12
+    //    this_thread::sleep_for(chrono::milliseconds(3));
+    //else if (setKeys.size() <= (1 << 16)) //set size =2^16
+    //    this_thread::sleep_for(chrono::milliseconds(5));
+    //else if (setKeys.size() <= (1 << 20)) //set size =2^16
+    //    this_thread::sleep_for(chrono::milliseconds(990));
+    //else
+    //    this_thread::sleep_for(chrono::milliseconds(990 * (setKeys.size() / (1 << 20))));
+}
+
+
+
+
+inline  void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::vector<std::vector<block>> setValues, std::vector<std::vector<block>>& okvsTable)
+{
+    GbfEncode(setKeys, setValues, okvsTable); //using gbf with two hash function 
+
+   //simulat the cost of okvs
+    if (setKeys.size() <= (1 << 12)) //set size =2^12
+        this_thread::sleep_for(chrono::milliseconds(52));
+    else if (setKeys.size() <= (1 << 16)) //set size =2^16
+        this_thread::sleep_for(chrono::milliseconds(103));
+    else if (setKeys.size() <= (1 << 20)) //set size =2^16
+        this_thread::sleep_for(chrono::milliseconds(2838));
+    else
+        this_thread::sleep_for(chrono::milliseconds(2838 * (setKeys.size() / (1 << 20))));
+}
+
+inline  void SimulatedOkvsDecode(const std::vector<std::vector<block>> okvsTable, const std::vector<block> setKeys, std::vector<std::vector<block>>& setValues)
+{
+
+    GbfDecode(okvsTable, setKeys, setValues);
+
+    //simulat the cost of okvs
+    if (setKeys.size() <= (1 << 12)) //set size =2^12
+        this_thread::sleep_for(chrono::milliseconds(3));
+    else if (setKeys.size() <= (1 << 16)) //set size =2^16
+        this_thread::sleep_for(chrono::milliseconds(5));
+    else if (setKeys.size() <= (1 << 20)) //set size =2^16
+        this_thread::sleep_for(chrono::milliseconds(990));
+    else
+        this_thread::sleep_for(chrono::milliseconds(990 * (setKeys.size() / (1 << 20))));
+}
+
 inline void GbfEncode(const std::vector<std::pair<block, block>> key_values, std::vector<block>& garbledBF)
 {
     u64 setSize = key_values.size();
@@ -196,7 +402,7 @@ inline void GbfTest()
     GbfEncode(setKeys, setValues, garbledBF);
 
     /*for (size_t i = 0; i < 10; i++)
-        std::cout << garbledBF[i] << "\n";*/
+        std::cout << okvsTable[i] << "\n";*/
 
 
 
@@ -213,11 +419,12 @@ inline void GbfTest()
 }
 
 
+
 inline  void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::vector<block> setValues, std::vector<block>& garbledBF)
 {
-     GbfEncode(setKeys, setValues, garbledBF); //using gbf with two hash function 
+    GbfEncode(setKeys, setValues, garbledBF); //using gbf with two hash function 
 
-    //simulat the cost of okvs
+   //simulat the cost of okvs
     if (setKeys.size() <= (1 << 12)) //set size =2^12
         this_thread::sleep_for(chrono::milliseconds(52));
     else if (setKeys.size() <= (1 << 16)) //set size =2^16
@@ -230,7 +437,7 @@ inline  void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::ve
 
 inline  void SimulatedOkvsDecode(const std::vector<block> garbledBF, const std::vector<block> setKeys, std::vector<block>& setValues)
 {
-    
+
     GbfDecode(garbledBF, setKeys, setValues);
 
     //simulat the cost of okvs
@@ -243,7 +450,6 @@ inline  void SimulatedOkvsDecode(const std::vector<block> garbledBF, const std::
     else
         this_thread::sleep_for(chrono::milliseconds(990 * (setKeys.size() / (1 << 20))));
 }
-
 
 inline void PaxosEncode(const std::vector<block> setKeys, const std::vector<block> setValues, std::vector<block>& okvs, uint64_t fieldSize)
 {

@@ -10,4 +10,6 @@
 using namespace osuCrypto;
 
 
+//void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet);
+
 void PqPsi_Test_Main();

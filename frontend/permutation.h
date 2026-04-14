@@ -21,6 +21,59 @@ using namespace osuCrypto;
 
 using Bits = std::vector<uint8_t>;   // each entry must be 0 or 1
 
+#define KEM_key_block_size 100 //1600*8/128 byte
+#define KEM_key_size_bit 12800 //1600*8/128 byte
+#define  Keccak_size_bit 1600 //bits
+
+typedef std::array<block, KEM_key_block_size> kemKey;
+
+
+inline Bits KemKeyToBits(const std::array<block, KEM_key_block_size>& key)
+{
+    constexpr size_t BLOCK_BITS = 128; // adjust if needed
+    Bits bits;
+    bits.reserve(KEM_key_block_size * BLOCK_BITS);
+
+    for (const auto& b : key) {
+        // Treat block as 128-bit value
+        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&b);
+
+        for (size_t i = 0; i < 16; ++i) {          // 16 bytes per block
+            for (size_t j = 0; j < 8; ++j) {       // 8 bits per byte
+                bits.push_back((bytes[i] >> j) & 1U);
+            }
+        }
+    }
+
+    return bits;
+}
+
+inline std::array<block, KEM_key_block_size> BitsToKemKey(const Bits& bits)
+{
+    constexpr size_t BLOCK_BITS = 128;
+    if (bits.size() != KEM_key_block_size * BLOCK_BITS) {
+        throw std::invalid_argument("Wrong bit size");
+    }
+
+    std::array<block, KEM_key_block_size> key{};
+
+    size_t idx = 0;
+
+    for (size_t k = 0; k < KEM_key_block_size; ++k) {
+        uint8_t* bytes = reinterpret_cast<uint8_t*>(&key[k]);
+
+        for (size_t i = 0; i < 16; ++i) {
+            uint8_t byte = 0;
+            for (size_t j = 0; j < 8; ++j) {
+                byte |= (bits[idx++] & 1U) << j;
+            }
+            bytes[i] = byte;
+        }
+    }
+
+    return key;
+}
+
 namespace Keccak1600Adapter {
 
     static constexpr size_t KECCAK_BITS = 1600;
