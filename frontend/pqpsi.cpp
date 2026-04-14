@@ -13,7 +13,18 @@
 using namespace osuCrypto;
 
 
+void KemKeyGeneration(std::vector<kemKey>& sk, std::vector<kemKey>& pk)
+{
+	for (size_t i = 0; i < sk.size(); i++) //TODO: get the real keys from KEM
+	{
+		for (size_t j = 0; j < sk[0].size(); j++)
+		{
+			sk[i][j] = ZeroBlock;
+			pk[i][j] = ZeroBlock;
+		}
 
+	}
+}
 void Encaps(std::vector<std::vector<block>>& input, std::vector<kemKey>& out)
 {
 	out.resize(input.size());
@@ -28,12 +39,13 @@ void Encaps(std::vector<std::vector<block>>& input, std::vector<kemKey>& out)
 	//TODO: write Encaps here
 
 }
-
 bool Decaps(kemKey sk, std::vector<block> value)
 {
 	//TODO write the decaps
 	return 1;
 }
+
+
 
 void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 {
@@ -97,18 +109,9 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 	std::vector<kemKey> recv_sk(inputSet.size());
 	std::vector<kemKey> recv_pk(inputSet.size());
 	std::vector<kemKey> sender_pk(inputSet.size());
-	
-	for (size_t i = 0; i < inputSet.size(); i++) //TODO: get the real keys from KEM
-	{
-		for (size_t j = 0; j < recv_sk[0].size(); j++)
-		{
-			recv_sk[i][j] = ZeroBlock;
-			recv_pk[i][j] = ZeroBlock;
-			sender_pk[i][j] = ZeroBlock;
-		}
-	
-	}
 
+	KemKeyGeneration(recv_sk, recv_pk);
+	
 	
 	//##########################
 	//### OKVS Encoding
