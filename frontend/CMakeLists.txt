@@ -8,7 +8,12 @@
 #               Build fronend.exe           #
 #############################################
 
-file(GLOB SRC_FRONTEND ${CMAKE_SOURCE_DIR}/frontend/*.cpp)
+file(GLOB SRC_FRONTEND
+    ${CMAKE_SOURCE_DIR}/frontend/*.cpp
+    ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/backend/*.cpp
+    ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/codec/*.cpp
+    ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/session/*.cpp
+    ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/native/*.c)
 include_directories(${CMAKE_SOURCE_DIR}/frontend/)
 
 add_executable(frontend.exe ${SRC_FRONTEND})
