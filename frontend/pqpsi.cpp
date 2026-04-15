@@ -212,7 +212,8 @@ bool Decaps(kemKey sk, std::vector<block> value)
 
 
 void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
-{
+{	
+	//whether print trace
 	const bool traceOn = []() {
 		const char* v = std::getenv("PQPSI_TRACE");
 		return v && *v && *v != '0';
