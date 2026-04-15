@@ -12,6 +12,7 @@
 #include "obf-mlkem/codec/Kemeleon.h"
 #include <array>
 #include <cstring>
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 
@@ -212,8 +213,14 @@ bool Decaps(kemKey sk, std::vector<block> value)
 
 void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 {
+	const bool traceOn = []() {
+		const char* v = std::getenv("PQPSI_TRACE");
+		return v && *v && *v != '0';
+	}();
+
 	auto trace = [&](const char* msg)
 	{
+		if (!traceOn) return;
 		std::cerr << "[pqpsi][p" << myIdx << "] " << msg << std::endl;
 	};
 
