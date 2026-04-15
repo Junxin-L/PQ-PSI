@@ -57,7 +57,7 @@ namespace
 		std::memcpy(out.data(), src.data(), kKemBytes);
 	}
 
-	//// inverse permutation on one kem row
+	//// undo one row from permutation domain back to original kem row
 	void decryptKemRow(const ConstructionPermutation& P, std::vector<block>& row)
 	{
 		if (row.size() != KEM_key_block_size)
@@ -82,7 +82,7 @@ void KemKeyGeneration(std::vector<kemKey>& sk, std::vector<kemKey>& pk)
 
 	for (size_t i = 0; i < sk.size(); i++) //TODO: get the real keys from KEM
 	{
-		//// clear storage slot
+		//// set current sk/pk row to zero first, so no leftover bytes leak in
 		for (size_t j = 0; j < sk[i].size(); j++)
 		{
 			sk[i][j] = ZeroBlock;
