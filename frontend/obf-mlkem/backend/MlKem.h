@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cryptoTools/Common/Defines.h"
+#include "../common/SpanLite.h"
 
 #include <array>
 #include <vector>

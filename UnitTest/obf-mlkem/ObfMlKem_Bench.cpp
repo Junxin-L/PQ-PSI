@@ -1,5 +1,5 @@
-#include "libPSI/Tools/obf-mlkem/backend/MlKem.h"
-#include "libPSI/Tools/obf-mlkem/codec/Kemeleon.h"
+#include "frontend/obf-mlkem/backend/MlKem.h"
+#include "frontend/obf-mlkem/codec/Kemeleon.h"
 
 #include <chrono>
 #include <ctime>

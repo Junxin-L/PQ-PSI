@@ -63,7 +63,6 @@ namespace osuCrypto
 			std::vector<u16> counts;
 		};
 
-		// ML-KEM ring constants
 		static constexpr u64 n = 256;
 		static constexpr u64 q = 3329;
 		static constexpr u64 rhoBytes = 32;
@@ -81,7 +80,7 @@ namespace osuCrypto
 		static void unpackBits(span<const u8> src, u64 bitsPerValue, u64 count, std::vector<u16>& out);
 		static void packBits(span<const u16> src, u64 bitsPerValue, std::vector<u8>& out);
 
-		// Figure 3 compression steps
+		// Figure 3 compression
 		static u16 compressValue(u16 x, u64 bitsPerValue);
 		static u16 decompressValue(u16 x, u64 bitsPerValue);
 

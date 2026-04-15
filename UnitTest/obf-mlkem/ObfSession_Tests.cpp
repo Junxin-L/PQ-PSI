@@ -1,7 +1,7 @@
 #include "ObfSession_Tests.h"
 
 #include "../Common.h"
-#include "libPSI/Tools/obf-mlkem/session/ObfSession.h"
+#include "frontend/obf-mlkem/session/ObfSession.h"
 
 #include <algorithm>
 

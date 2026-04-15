@@ -1,6 +1,6 @@
 # obf-mlkem
 
-This directory is the `obf-mlkem` tooling we added under `libPSI/Tools`.
+This directory is the `obf-mlkem` tooling under `frontend/obf-mlkem`.
 
 Right now the useful pieces are:
 
@@ -65,7 +65,7 @@ The current encoded sizes are:
 
 ## Tests
 
-The tests for this code is under [Tests/obf-mlkem](../../../Tests/obf-mlkem).
+The tests for this code are under [UnitTest/obf-mlkem](../../../UnitTest/obf-mlkem).
 
 They cover:
 
@@ -88,7 +88,7 @@ arch -x86_64 /bin/zsh -lc 'eval "$(/usr/local/bin/brew shellenv)" && cmake --bui
 ```
 
 
-The `Tests/` code builds into `libTests`. There is not a standalone `obf-mlkem` unit-test.
+The `UnitTest/` code builds into the unit-test target. There is not a standalone `obf-mlkem` unit-test binary.
 
 
 ## Benchmark
@@ -97,7 +97,7 @@ There is also a small benchmark for the `MlKem` and `Kemeleon` parts.
 
 The source is:
 
-- [Tests/obf-mlkem/ObfMlKem_Bench.cpp](../../../Tests/obf-mlkem/ObfMlKem_Bench.cpp)
+- [UnitTest/obf-mlkem/ObfMlKem_Bench.cpp](../../../UnitTest/obf-mlkem/ObfMlKem_Bench.cpp)
 
 For each mode
 
