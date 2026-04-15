@@ -1,17 +1,27 @@
 #pragma once
-// This file and the associated implementation has been placed in the public domain, waiving all copyright. No restrictions are placed on its use. 
 
 
 
-#include <cryptoTools/Network/Channel.h>
-//template<typename ... Args>
-//std::string string_format(const std::string& format, Args ... args)
-//{
-//	size_t size = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
-//	std::unique_ptr<char[]> buf(new char[size]);
-//	std::snprintf(buf.get(), size, format.c_str(), args ...);
-//	return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
-//}
+#include "Network/Channel.h"
+#include <fstream>
+
+#define SimulatedOkvs 0
+#define PolyOkvs 1
+#define PaxosOkvs 2
+#define	TableOPPRF 0
+
+#define secMalicious 0
+#define secSemiHonest 1
+
+#define okvsHashFunctions 2 
+#define okvsLengthScale 2.5
+
+
+
+#define isNTLThreadSafe 0
+
+void InitDebugPrinting(std::string file = "../testoutput.txt");
+
 void senderGetLatency(osuCrypto::Channel& chl);
 
 void recverGetLatency(osuCrypto::Channel& chl);

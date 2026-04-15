@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.6)
+cmake_minimum_required (VERSION 2.8)
 
 project("libPSI")
 
@@ -12,8 +12,8 @@ set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/lib)
 #            Flag and #defines              #
 #############################################
 add_definitions(-DSOLUTION_DIR=\"${CMAKE_SOURCE_DIR}\")
-set(CMAKE_C_FLAGS "-ffunction-sections -Wall -Wno-strict-aliasing  -maes -msse2 -msse4.1 -mpclmul -Wno-sign-compare -Wfatal-errors -pthread")
-set(CMAKE_CXX_FLAGS  "${CMAKE_C_FLAGS}  -std=c++14")
+set(CMAKE_C_FLAGS "-ffunction-sections -Wall  -maes -msse2 -msse4.1 -mpclmul -Wfatal-errors -pthread")
+set(CMAKE_CXX_FLAGS  "${CMAKE_C_FLAGS}  -std=gnu++14")
 
 # Set a default build type for single-configuration
 # CMake generators if no build type is set.
@@ -21,79 +21,79 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
    SET(CMAKE_BUILD_TYPE Release)
 endif()
 
-
 if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release")
-  message(WARNING "\nConfiguration NOT set to Release. Please call cmake with -DCMAKE_BUILD_TYPE=Release  instead of ${CMAKE_BUILD_TYPE}")
-
-    if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-      #message(WARNING "Debug build.")
-    elseif("${CMAKE_BUILD_TYPE}" STREQUAL "Release") 
-      #message(WARNING "Release build.")
-    elseif("${CMAKE_BUILD_TYPE}" STREQUAL  "RELWITHDEBINFO")
-      #message(WARNING "RELWITHDEBINFO=Release with debug info build.")
-    else()
-      message(ERROR ": Unknown build type - ${CMAKE_BUILD_TYPE}  Please use one of Debug, Release, or RELWITHDEBINFO\n\n" )
-    endif()
+  message(WARNING "\nConfiguration NOT set to Release. Please call cmake with CMAKE_BUILD_TYPE=Release")
 endif()
-
 
 # Select flags.
 SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -ggdb -rdynamic")
-SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g3 -ggdb -rdynamic")
+SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
+SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")
 
 
 #############################################
 #       Library/includes locations          #
 #############################################
 
-include_directories("${CMAKE_SOURCE_DIR}")
-
 # default location for libOTe
 set(libOTe_Dirs "${CMAKE_SOURCE_DIR}/libOTe/")
-include_directories("${libOTe_Dirs}/") 
-include_directories("${libOTe_Dirs}/cryptoTools") 
+include_directories("${libOTe_Dirs}/libOTe/") 
+link_directories("${libOTe_Dirs}/lib/")
 
 # default location for miracl
-set(Miracl_Dirs "${libOTe_Dirs}/cryptoTools/thirdparty/linux/miracl/")
+set(Miracl_Dirs "${CMAKE_SOURCE_DIR}/thirdparty/linux/miracl/")
 include_directories("${Miracl_Dirs}") 
+link_directories("${Miracl_Dirs}/miracl/source/")
 
 # default location for NTL
 set(NTL_Dirs "${CMAKE_SOURCE_DIR}/thirdparty/linux/ntl/")
-#set(NTL_Dirs "/home/bush/Desktop/Avishay/NTL/ntl-10.5.0/")
 include_directories("${NTL_Dirs}/include/")
+link_directories("${NTL_Dirs}/src/")
 
-# default location for GMP
-set(GMP_Dirs "${CMAKE_SOURCE_DIR}/thirdparty/linux/gmp/")
-include_directories("${GMP_Dirs}/include/")
-
-# default location for GF2X
-set(GF2X_Dirs "${CMAKE_SOURCE_DIR}/thirdparty/linux/gf2x/")
-include_directories("${GF2X_Dirs}/include/")
+set(libPaXoS_Dirs "${CMAKE_SOURCE_DIR}/libPaXoS/")
+include_directories("${libPaXoS_Dirs}/libPaXoS/")
+link_directories("${libPaXoS_Dirs}/")
 
 # default location for Boost
-set(BOOST_ROOT "${libOTe_Dirs}/cryptoTools/thirdparty/linux/boost/")
+set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/thirdparty/linux/boost/")
 
-# default location for SODIUM
-set(SODIUM_Dirs "${CMAKE_SOURCE_DIR}/libsodium-stable/")
-include_directories("${SODIUM_Dirs}/bin/include/")
 
 #############################################
-#               Build libPSI                 #
+#            Build cryptoTools              #
 #############################################
-add_subdirectory(libPSI)
-include_directories(libPSI)
+add_subdirectory(cryptoTools)
+include_directories(cryptoTools)
+
+#############################################
+#               Build libOTe                #
+#############################################
+add_subdirectory(libOTe)
+include_directories(libOTe)
+
+
+#############################################
+#               Build libOPRF                 #
+#############################################
+add_subdirectory(libOPRF)
+include_directories(libOPRF)
+
+#############################################
+#               Build libPaXoS              #
+#############################################
+add_subdirectory(libPaXoS)
+include_directories(libPaXoS)
 
 
 #############################################
 #           Build libPSI Tests              #
 #############################################
-add_subdirectory(Tests)
-include_directories(Tests)
+#add_subdirectory(libPSI_Tests)
+#include_directories(libPSI_Tests)
 
 
 #############################################
 #              Build Frontend               #
 #############################################
 add_subdirectory(frontend)
+
 
