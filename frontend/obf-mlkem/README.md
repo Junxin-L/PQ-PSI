@@ -19,6 +19,7 @@ Right now the useful pieces are:
 ## Dependencies
 
 The main dependency here is [thirdparty/mlkem-native](../../../thirdparty/mlkem-native). That is the actual ML-KEM implementation.
+**PS: Change files in frontend/obf-mlkem/native if changing the location of mlkem-native**
 
 We also use:
 
