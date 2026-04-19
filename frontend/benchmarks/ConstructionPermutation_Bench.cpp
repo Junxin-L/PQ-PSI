@@ -104,11 +104,11 @@ int main(int argc, char** argv)
 {
 	const std::string outPath = (argc > 1) ? argv[1] : "build-x86/construction_permutation_benchmark.txt";
 
-	// This is exactly the final construction in permutation.h usage in pqpsi:
-	// ConstructionPermutation(Keccak_size_bit, KEM_key_size_bit, Keccak_size_bit, pi, pi_inv)
+	// This tracks pqpsi settings and lambda constraint: s>3*lambda and n-s>3*lambda
 	const size_t nBits = Keccak_size_bit;
 	const size_t NBits = KEM_key_size_bit;
-	const size_t sBits = Keccak_size_bit;
+	const size_t sBits = 800;
+	const size_t lambdaBits = 40;
 	const size_t warmupRounds = 20;
 	const size_t benchRounds = 400;
 	const u64 rngSeed = 0x5EED123456789ABCuLL;
@@ -118,7 +118,8 @@ int main(int argc, char** argv)
 		NBits,
 		sBits,
 		Keccak1600Adapter::pi,
-		Keccak1600Adapter::pi_inv);
+		Keccak1600Adapter::pi_inv,
+		lambdaBits);
 
 	std::mt19937_64 rng(rngSeed);
 	std::vector<Bits> states(benchRounds + warmupRounds, Bits(NBits, 0));
@@ -189,6 +190,8 @@ int main(int argc, char** argv)
 	out << "n_bits: " << nBits << "\n";
 	out << "N_bits: " << NBits << "\n";
 	out << "s_bits: " << sBits << "\n";
+	out << "lambda_bits: " << lambdaBits << "\n";
+	out << "constraint_check: s>3*lambda and n-s>3*lambda\n";
 	out << "rounds_in_construction: " << P.rounds() << "\n";
 	out << "warmup_rounds: " << warmupRounds << "\n";
 	out << "benchmark_rounds: " << benchRounds << "\n";
@@ -226,4 +229,3 @@ int main(int argc, char** argv)
 	std::cout << "wrote benchmark report: " << outPath << "\n";
 	return 0;
 }
-

@@ -132,10 +132,12 @@ public:
         size_t N_bits,
         size_t s_bits,
         std::function<Bits(const Bits&)> pi_func,
-        std::function<Bits(const Bits&)> pi_inv_func
+        std::function<Bits(const Bits&)> pi_inv_func,
+        size_t lambda_bits = 40
     )
         : n(n_bits), N(N_bits), s(s_bits),
-        pi(std::move(pi_func)), pi_inv(std::move(pi_inv_func)) {
+        pi(std::move(pi_func)), pi_inv(std::move(pi_inv_func)),
+        lambda(lambda_bits) {
 
         if (n == 0 || N == 0 || s == 0) {
             throw std::invalid_argument("n, N, and s must be positive.");
@@ -150,9 +152,13 @@ public:
             throw std::invalid_argument("Need s <= n so the range [s+1..n] is non-empty.");
         }
 
+        const size_t threeLambda = 3 * lambda;
+        if (!(s > threeLambda && (n - s) > threeLambda)) {
+            throw std::invalid_argument("Need s > 3*lambda and n-s > 3*lambda.");
+        }
+
         t = (N - n) / s + 1;
         r = 5 * t;
-        hasRoundXor = (n > s);
     }
 
     Bits encrypt(Bits X) const {
@@ -172,8 +178,7 @@ public:
 
         for (size_t i = 1; i <= r - 1; ++i) {
             apply_pi_to_first_n_shifted(X, shift, prefix);
-            // skip empty xor step when n==s
-            if (hasRoundXor) xor_round_index_into_slice_shifted(X, shift, i);
+            xor_round_index_into_slice_shifted(X, shift, i);
             shift = (shift + s) % N;
         }
 
@@ -203,8 +208,7 @@ public:
 
         for (size_t i = r - 1; i >= 1; --i) {
             shift = (shift + N - s) % N;
-            // skip empty xor step when n==s
-            if (hasRoundXor) xor_round_index_into_slice_shifted(X, shift, i);
+            xor_round_index_into_slice_shifted(X, shift, i);
             apply_pi_inv_to_first_n_shifted(X, shift, prefix);
 
             if (i == 1) break; // avoid size_t underflow
@@ -218,7 +222,7 @@ public:
 
 private:
     size_t n, N, s, t, r;
-    bool hasRoundXor = true;
+    size_t lambda = 40;
     std::function<Bits(const Bits&)> pi;
     std::function<Bits(const Bits&)> pi_inv;
 
@@ -386,7 +390,7 @@ private:
 inline int permutation_Test() {
     size_t n = 1600;
     size_t N = n * 8;
-    size_t s = n;
+    size_t s = 800;
 
     ConstructionPermutation P(n, N, s, Keccak1600Adapter::pi, Keccak1600Adapter::pi_inv);
 
