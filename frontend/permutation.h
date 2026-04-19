@@ -152,34 +152,65 @@ public:
 
         t = (N - n) / s + 1;
         r = 5 * t;
+        hasRoundXor = (n > s);
     }
 
     Bits encrypt(Bits X) const {
         check_state(X);
 
+        // for (size_t i = 1; i <= r - 1; ++i) {
+        //     apply_pi_to_first_n(X);
+        //     xor_round_index_into_slice(X, i);
+        //     rotate_left(X, s);
+        // }
+        // apply_pi_to_first_n(X);
+
+        // shift view, no full rotate per round
+        size_t shift = 0;
+        Bits prefix;
+        prefix.resize(n);
+
         for (size_t i = 1; i <= r - 1; ++i) {
-            apply_pi_to_first_n(X);
-            xor_round_index_into_slice(X, i);
-            rotate_left(X, s);
+            apply_pi_to_first_n_shifted(X, shift, prefix);
+            // skip empty xor step when n==s
+            if (hasRoundXor) xor_round_index_into_slice_shifted(X, shift, i);
+            shift = (shift + s) % N;
         }
 
-        apply_pi_to_first_n(X);
+        apply_pi_to_first_n_shifted(X, shift, prefix);
+        materialize_shifted_state(X, shift);
         return X;
     }
 
     Bits decrypt(Bits X) const {
         check_state(X);
 
-        apply_pi_inv_to_first_n(X);
+        // kept for reference
+        // apply_pi_inv_to_first_n(X);
+        // for (size_t i = r - 1; i >= 1; --i) {
+        //     rotate_right(X, s);
+        //     xor_round_index_into_slice(X, i);
+        //     apply_pi_inv_to_first_n(X);
+        //     if (i == 1) break; // avoid size_t underflow
+        // }
+
+        // reverse with the same shift view
+        size_t shift = 0;
+        Bits prefix;
+        prefix.resize(n);
+
+        apply_pi_inv_to_first_n_shifted(X, shift, prefix);
 
         for (size_t i = r - 1; i >= 1; --i) {
-            rotate_right(X, s);
-            xor_round_index_into_slice(X, i);
-            apply_pi_inv_to_first_n(X);
+            shift = (shift + N - s) % N;
+            // skip empty xor step when n==s
+            if (hasRoundXor) xor_round_index_into_slice_shifted(X, shift, i);
+            apply_pi_inv_to_first_n_shifted(X, shift, prefix);
 
             if (i == 1) break; // avoid size_t underflow
         }
 
+        materialize_shifted_state(X, shift);
         return X;
     }
 
@@ -187,6 +218,7 @@ public:
 
 private:
     size_t n, N, s, t, r;
+    bool hasRoundXor = true;
     std::function<Bits(const Bits&)> pi;
     std::function<Bits(const Bits&)> pi_inv;
 
@@ -201,22 +233,108 @@ private:
         }
     }
 
+    size_t shifted_idx(size_t i, size_t shift) const {
+        // logical index -> physical index
+        const size_t j = i + shift;
+        return (j < N) ? j : (j - N);
+    }
+
+    void materialize_shifted_state(Bits& X, size_t shift) const {
+        if (shift == 0) return;
+        // materialize shifted view
+        std::rotate(X.begin(), X.begin() + shift, X.end());
+    }
+
     void apply_pi_to_first_n(Bits& X) const {
-        Bits prefix(X.begin(), X.begin() + n);
+        // Bits prefix(X.begin(), X.begin() + n);
+        // prefix = pi(prefix);
+        // if (prefix.size() != n) {
+        //     throw std::runtime_error("pi must return exactly n bits.");
+        // }
+        // std::copy(prefix.begin(), prefix.end(), X.begin());
+
+        // reuse one local buffer
+        thread_local Bits prefix;
+        prefix.resize(n);
+        std::copy_n(X.begin(), n, prefix.begin());
+
         prefix = pi(prefix);
         if (prefix.size() != n) {
             throw std::runtime_error("pi must return exactly n bits.");
         }
-        std::copy(prefix.begin(), prefix.end(), X.begin());
+        std::copy_n(prefix.begin(), n, X.begin());
     }
 
     void apply_pi_inv_to_first_n(Bits& X) const {
-        Bits prefix(X.begin(), X.begin() + n);
+        // Bits prefix(X.begin(), X.begin() + n);
+        // prefix = pi_inv(prefix);
+        // if (prefix.size() != n) {
+        //     throw std::runtime_error("pi_inv must return exactly n bits.");
+        // }
+        // std::copy(prefix.begin(), prefix.end(), X.begin());
+
+        // reuse one local buffer
+        thread_local Bits prefix;
+        prefix.resize(n);
+        std::copy_n(X.begin(), n, prefix.begin());
+
         prefix = pi_inv(prefix);
         if (prefix.size() != n) {
             throw std::runtime_error("pi_inv must return exactly n bits.");
         }
-        std::copy(prefix.begin(), prefix.end(), X.begin());
+        std::copy_n(prefix.begin(), n, X.begin());
+    }
+
+    void apply_pi_to_first_n_shifted(Bits& X, size_t shift, Bits& prefix) const {
+        // for (size_t i = 0; i < n; ++i) {
+        //     prefix[i] = X[shifted_idx(i, shift)];
+        // }
+
+        // two contiguous copies
+        const size_t firstLen = std::min(n, N - shift);
+        std::copy_n(X.begin() + shift, firstLen, prefix.begin());
+        if (firstLen < n) {
+            std::copy_n(X.begin(), n - firstLen, prefix.begin() + firstLen);
+        }
+
+        prefix = pi(prefix);
+        if (prefix.size() != n) {
+            throw std::runtime_error("pi must return exactly n bits.");
+        }
+
+        // for (size_t i = 0; i < n; ++i) {
+        //     X[shifted_idx(i, shift)] = prefix[i];
+        // }
+        std::copy_n(prefix.begin(), firstLen, X.begin() + shift);
+        if (firstLen < n) {
+            std::copy_n(prefix.begin() + firstLen, n - firstLen, X.begin());
+        }
+    }
+
+    void apply_pi_inv_to_first_n_shifted(Bits& X, size_t shift, Bits& prefix) const {
+        // for (size_t i = 0; i < n; ++i) {
+        //     prefix[i] = X[shifted_idx(i, shift)];
+        // }
+
+        // two contiguous copies
+        const size_t firstLen = std::min(n, N - shift);
+        std::copy_n(X.begin() + shift, firstLen, prefix.begin());
+        if (firstLen < n) {
+            std::copy_n(X.begin(), n - firstLen, prefix.begin() + firstLen);
+        }
+
+        prefix = pi_inv(prefix);
+        if (prefix.size() != n) {
+            throw std::runtime_error("pi_inv must return exactly n bits.");
+        }
+
+        // for (size_t i = 0; i < n; ++i) {
+        //     X[shifted_idx(i, shift)] = prefix[i];
+        // }
+        std::copy_n(prefix.begin(), firstLen, X.begin() + shift);
+        if (firstLen < n) {
+            std::copy_n(prefix.begin() + firstLen, n - firstLen, X.begin());
+        }
     }
 
     // XOR the round counter i into X[s .. n-1] (0-based indexing)
@@ -228,24 +346,39 @@ private:
         }
     }
 
+    void xor_round_index_into_slice_shifted(Bits& X, size_t shift, size_t i) const {
+        size_t len = n - s;
+        for (size_t bit = 0; bit < len; ++bit) {
+            X[shifted_idx(s + bit, shift)] ^= static_cast<uint8_t>((i >> bit) & 1U);
+        }
+    }
+
     // Cyclic shift left by k bits on the whole N-bit state
     void rotate_left(Bits& X, size_t k) const {
         k %= N;
         if (k == 0) return;
-        Bits tmp = X;
-        for (size_t i = 0; i < N; ++i) {
-            X[i] = tmp[(i + k) % N];
-        }
+
+        // Bits tmp = X;
+        // for (size_t i = 0; i < N; ++i) {
+        //     X[i] = tmp[(i + k) % N];
+        // }
+
+        // in-place rotate
+        std::rotate(X.begin(), X.begin() + k, X.end());
     }
 
     // Cyclic shift right by k bits on the whole N-bit state
     void rotate_right(Bits& X, size_t k) const {
         k %= N;
         if (k == 0) return;
-        Bits tmp = X;
-        for (size_t i = 0; i < N; ++i) {
-            X[(i + k) % N] = tmp[i];
-        }
+
+        // Bits tmp = X;
+        // for (size_t i = 0; i < N; ++i) {
+        //     X[(i + k) % N] = tmp[i];
+        // }
+
+        // in-place rotate
+        std::rotate(X.begin(), X.end() - k, X.end());
     }
 };
 

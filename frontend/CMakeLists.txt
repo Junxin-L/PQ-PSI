@@ -22,6 +22,10 @@ set(SRC_KECCAK
 
 add_executable(frontend.exe ${SRC_FRONTEND} ${SRC_KECCAK})
 
+add_executable(construction_permutation_bench
+    ${CMAKE_SOURCE_DIR}/frontend/benchmarks/ConstructionPermutation_Bench.cpp
+    ${SRC_KECCAK})
+
 
 #############################################
 #            Link our libraries             #
