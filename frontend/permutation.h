@@ -17,7 +17,7 @@ using namespace osuCrypto;
 
 
 
-#include "Keccak-f.h"   // from KeccakTools / XKCP
+#include "../thirdparty/KeccakTools/Sources/Keccak-f.h"
 
 using Bits = std::vector<uint8_t>;   // each entry must be 0 or 1
 
@@ -79,56 +79,50 @@ namespace Keccak1600Adapter {
     static constexpr size_t KECCAK_BITS = 1600;
     static constexpr size_t KECCAK_BYTES = KECCAK_BITS / 8;
 
-    // Bit order used here:
-    // bit i lives in byte i/8, bit (i % 8), with bit 0 as the LSB of the byte.
-   /* inline std::array<uint8_t, KECCAK_BYTES> packBits(const Bits& x) {
+    inline std::array<UINT8, KECCAK_BYTES> packBits(const Bits& x) {
         if (x.size() != KECCAK_BITS) {
             throw std::invalid_argument("Keccak1600Adapter::packBits: input must be 1600 bits.");
         }
 
-        std::array<uint8_t, KECCAK_BYTES> buf{};
+        std::array<UINT8, KECCAK_BYTES> buf{};
         buf.fill(0);
 
         for (size_t i = 0; i < KECCAK_BITS; ++i) {
             if (x[i] & 1U) {
-                buf[i / 8] |= static_cast<uint8_t>(1U << (i % 8));
+                buf[i / 8] |= static_cast<UINT8>(1U << (i % 8));
             }
         }
         return buf;
     }
 
-    inline Bits unpackBits(const std::array<uint8_t, KECCAK_BYTES>& buf) {
+    inline Bits unpackBits(const std::array<UINT8, KECCAK_BYTES>& buf) {
         Bits x(KECCAK_BITS, 0);
 
         for (size_t i = 0; i < KECCAK_BITS; ++i) {
             x[i] = static_cast<uint8_t>((buf[i / 8] >> (i % 8)) & 1U);
         }
         return x;
-    }*/
+    }
+
+    inline const KeccakF& getKeccak1600()
+    {
+        static const KeccakF keccak1600(1600);
+        return keccak1600;
+    }
 
     inline Bits pi(const Bits& x) {
-        //auto buf = packBits(x);
-
-      /*  KeccakF keccak1600(1600); //TODP
-        keccak1600(reinterpret_cast<UINT8*>(buf.data()));*/
-
-        //return unpackBits(buf);
-        return x;
+        auto buf = packBits(x);
+        getKeccak1600()(buf.data());
+        return unpackBits(buf);
     }
 
     inline Bits pi_inv(const Bits& x) {
-        //auto buf = packBits(x);
-
-      /*  KeccakF keccak1600(1600);
-        keccak1600.inverse(reinterpret_cast<UINT8*>(buf.data()));*/
-
-        //return unpackBits(buf);
-        return x;
+        auto buf = packBits(x);
+        getKeccak1600().inverse(buf.data());
+        return unpackBits(buf);
     }
 
 } // namespace Keccak1600Adapter
-
-using Bits = std::vector<uint8_t>;   // each entry should be 0 or 1
 
 class ConstructionPermutation {
 public:

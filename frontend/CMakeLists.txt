@@ -16,7 +16,11 @@ file(GLOB SRC_FRONTEND
     ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/native/*.c)
 include_directories(${CMAKE_SOURCE_DIR}/frontend/)
 
-add_executable(frontend.exe ${SRC_FRONTEND})
+set(SRC_KECCAK
+    ${CMAKE_SOURCE_DIR}/thirdparty/KeccakTools/Sources/Keccak-f.cpp
+    ${CMAKE_SOURCE_DIR}/thirdparty/KeccakTools/Sources/transformations.cpp)
+
+add_executable(frontend.exe ${SRC_FRONTEND} ${SRC_KECCAK})
 
 
 #############################################
