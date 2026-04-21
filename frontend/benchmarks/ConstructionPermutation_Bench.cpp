@@ -107,7 +107,7 @@ int main(int argc, char** argv)
 	// This tracks pqpsi settings and lambda constraint: s>3*lambda and n-s>3*lambda
 	const size_t nBits = Keccak_size_bit;
 	const size_t NBits = KEM_key_size_bit;
-	const size_t sBits = 800;
+	const size_t sBits = 1400;
 	const size_t lambdaBits = 40;
 	const size_t warmupRounds = 20;
 	const size_t benchRounds = 400;
@@ -175,14 +175,15 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	out << "ConstructionPermutation benchmark\n";
+	out << "ConstructionPermutation benchmark (s=" << sBits << ")\n";
 	out << "timestamp: " << nowIsoLike() << "\n";
 	out << "host_uname: " << unameLine() << "\n";
 	out << "cpu_model: " << cpuModel() << "\n";
 	out << "hw_threads: " << std::thread::hardware_concurrency() << "\n";
 	out << "compiler: " << __VERSION__ << "\n";
 	out << "keccak_backend: thirdparty/KeccakTools/Sources/Keccak-f.*\n";
-	out << "what_is_measured: permutation.h ConstructionPermutation encrypt/decrypt final parameters\n";
+	out << "what_is_measured: permutation.h ConstructionPermutation encrypt/decrypt final parameters with s=" << sBits << "\n";
+	out << "selected_s_bits: " << sBits << "\n";
 	out << "arch_note: run under x86_64 if on Apple Silicon\n";
 	out << "\n";
 

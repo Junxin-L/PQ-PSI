@@ -296,7 +296,7 @@ void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet)
 
 	u64 okvsTableSize= okvsLengthScale * inputSet.size(); //depending on okvs variant
 	u64 rowOkvsBlkSize = KEM_key_block_size;
-	int s = 800; // permutation parameter, with lambda=40 need s>120 and n-s>120
+	int s = 1400; // better round count, still inside lambda bound
 	ConstructionPermutation P(Keccak_size_bit, KEM_key_size_bit, s, Keccak1600Adapter::pi, Keccak1600Adapter::pi_inv);
 
 

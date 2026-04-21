@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <vector>
 #include <stdexcept>
+#include <random>
 
 using namespace osuCrypto;
 
@@ -110,6 +111,26 @@ namespace Keccak1600Adapter {
         return keccak1600;
     }
 
+    inline void packShiftedBits(const Bits& x, size_t shift, std::array<UINT8, KECCAK_BYTES>& buf) {
+        buf.fill(0);
+
+        for (size_t i = 0; i < KECCAK_BITS; ++i) {
+            const size_t j = shift + i;
+            const size_t src = (j < x.size()) ? j : (j - x.size());
+            if (x[src] & 1U) {
+                buf[i / 8] |= static_cast<UINT8>(1U << (i % 8));
+            }
+        }
+    }
+
+    inline void unpackShiftedBits(Bits& x, size_t shift, const std::array<UINT8, KECCAK_BYTES>& buf) {
+        for (size_t i = 0; i < KECCAK_BITS; ++i) {
+            const size_t j = shift + i;
+            const size_t dst = (j < x.size()) ? j : (j - x.size());
+            x[dst] = static_cast<uint8_t>((buf[i / 8] >> (i % 8)) & 1U);
+        }
+    }
+
     inline Bits pi(const Bits& x) {
         auto buf = packBits(x);
         getKeccak1600()(buf.data());
@@ -120,6 +141,30 @@ namespace Keccak1600Adapter {
         auto buf = packBits(x);
         getKeccak1600().inverse(buf.data());
         return unpackBits(buf);
+    }
+
+    inline void apply_inplace(Bits& x) {
+        auto buf = packBits(x);
+        getKeccak1600()(buf.data());
+
+        // old path
+        // x = unpackBits(buf);
+
+        for (size_t i = 0; i < KECCAK_BITS; ++i) {
+            x[i] = static_cast<uint8_t>((buf[i / 8] >> (i % 8)) & 1U);
+        }
+    }
+
+    inline void apply_inverse_inplace(Bits& x) {
+        auto buf = packBits(x);
+        getKeccak1600().inverse(buf.data());
+
+        // old path
+        // x = unpackBits(buf);
+
+        for (size_t i = 0; i < KECCAK_BITS; ++i) {
+            x[i] = static_cast<uint8_t>((buf[i / 8] >> (i % 8)) & 1U);
+        }
     }
 
 } // namespace Keccak1600Adapter
@@ -158,7 +203,20 @@ public:
         }
 
         t = (N - n) / s + 1;
+        // old round count
+        // r = 5 * t;
+
+        // trial round count
         r = 5 * t;
+
+        // round mask cache
+        build_round_masks();
+
+        // direct shifted bit path
+        // use_keccak1600_fast_path = (n == Keccak1600Adapter::KECCAK_BITS);
+
+        // keep off
+        use_keccak1600_fast_path = false;
     }
 
     Bits encrypt(Bits X) const {
@@ -225,6 +283,20 @@ private:
     size_t lambda = 40;
     std::function<Bits(const Bits&)> pi;
     std::function<Bits(const Bits&)> pi_inv;
+    std::vector<Bits> round_masks;
+    bool use_keccak1600_fast_path = false;
+
+    void build_round_masks() {
+        const size_t len = n - s;
+        round_masks.resize(r);
+
+        for (size_t i = 1; i < r; ++i) {
+            round_masks[i].assign(len, 0);
+            for (size_t bit = 0; bit < len; ++bit) {
+                round_masks[i][bit] = static_cast<u8>((i >> bit) & 1U);
+            }
+        }
+    }
 
     void check_state(const Bits& X) const {
         if (X.size() != N) {
@@ -262,7 +334,11 @@ private:
         prefix.resize(n);
         std::copy_n(X.begin(), n, prefix.begin());
 
-        prefix = pi(prefix);
+        // old path
+        // prefix = pi(prefix);
+
+        // inplace keccak
+        Keccak1600Adapter::apply_inplace(prefix);
         if (prefix.size() != n) {
             throw std::runtime_error("pi must return exactly n bits.");
         }
@@ -282,7 +358,11 @@ private:
         prefix.resize(n);
         std::copy_n(X.begin(), n, prefix.begin());
 
-        prefix = pi_inv(prefix);
+        // old path
+        // prefix = pi_inv(prefix);
+
+        // inplace keccak inv
+        Keccak1600Adapter::apply_inverse_inplace(prefix);
         if (prefix.size() != n) {
             throw std::runtime_error("pi_inv must return exactly n bits.");
         }
@@ -294,6 +374,32 @@ private:
         //     prefix[i] = X[shifted_idx(i, shift)];
         // }
 
+        // direct keccak path
+        if (use_keccak1600_fast_path) {
+            std::array<UINT8, Keccak1600Adapter::KECCAK_BYTES> buf{};
+
+            // old prefix path
+            // const size_t firstLen = std::min(n, N - shift);
+            // std::copy_n(X.begin() + shift, firstLen, prefix.begin());
+            // if (firstLen < n) {
+            //     std::copy_n(X.begin(), n - firstLen, prefix.begin() + firstLen);
+            // }
+            // prefix = pi(prefix);
+            // if (prefix.size() != n) {
+            //     throw std::runtime_error("pi must return exactly n bits.");
+            // }
+            // std::copy_n(prefix.begin(), firstLen, X.begin() + shift);
+            // if (firstLen < n) {
+            //     std::copy_n(prefix.begin() + firstLen, n - firstLen, X.begin());
+            // }
+
+            // pack -> keccak -> unpack
+            Keccak1600Adapter::packShiftedBits(X, shift, buf);
+            Keccak1600Adapter::getKeccak1600()(buf.data());
+            Keccak1600Adapter::unpackShiftedBits(X, shift, buf);
+            return;
+        }
+
         // two contiguous copies
         const size_t firstLen = std::min(n, N - shift);
         std::copy_n(X.begin() + shift, firstLen, prefix.begin());
@@ -301,7 +407,11 @@ private:
             std::copy_n(X.begin(), n - firstLen, prefix.begin() + firstLen);
         }
 
-        prefix = pi(prefix);
+        // old path
+        // prefix = pi(prefix);
+
+        // inplace keccak
+        Keccak1600Adapter::apply_inplace(prefix);
         if (prefix.size() != n) {
             throw std::runtime_error("pi must return exactly n bits.");
         }
@@ -320,6 +430,32 @@ private:
         //     prefix[i] = X[shifted_idx(i, shift)];
         // }
 
+        // direct keccak inv path
+        if (use_keccak1600_fast_path) {
+            std::array<UINT8, Keccak1600Adapter::KECCAK_BYTES> buf{};
+
+            // old prefix path
+            // const size_t firstLen = std::min(n, N - shift);
+            // std::copy_n(X.begin() + shift, firstLen, prefix.begin());
+            // if (firstLen < n) {
+            //     std::copy_n(X.begin(), n - firstLen, prefix.begin() + firstLen);
+            // }
+            // prefix = pi_inv(prefix);
+            // if (prefix.size() != n) {
+            //     throw std::runtime_error("pi_inv must return exactly n bits.");
+            // }
+            // std::copy_n(prefix.begin(), firstLen, X.begin() + shift);
+            // if (firstLen < n) {
+            //     std::copy_n(prefix.begin() + firstLen, n - firstLen, X.begin());
+            // }
+
+            // pack -> keccak inv -> unpack
+            Keccak1600Adapter::packShiftedBits(X, shift, buf);
+            Keccak1600Adapter::getKeccak1600().inverse(buf.data());
+            Keccak1600Adapter::unpackShiftedBits(X, shift, buf);
+            return;
+        }
+
         // two contiguous copies
         const size_t firstLen = std::min(n, N - shift);
         std::copy_n(X.begin() + shift, firstLen, prefix.begin());
@@ -327,7 +463,11 @@ private:
             std::copy_n(X.begin(), n - firstLen, prefix.begin() + firstLen);
         }
 
-        prefix = pi_inv(prefix);
+        // old path
+        // prefix = pi_inv(prefix);
+
+        // inplace keccak inv
+        Keccak1600Adapter::apply_inverse_inplace(prefix);
         if (prefix.size() != n) {
             throw std::runtime_error("pi_inv must return exactly n bits.");
         }
@@ -352,8 +492,28 @@ private:
 
     void xor_round_index_into_slice_shifted(Bits& X, size_t shift, size_t i) const {
         size_t len = n - s;
-        for (size_t bit = 0; bit < len; ++bit) {
-            X[shifted_idx(s + bit, shift)] ^= static_cast<uint8_t>((i >> bit) & 1U);
+        const Bits& mask = round_masks[i];
+
+        // old path
+        // for (size_t bit = 0; bit < len; ++bit) {
+        //     X[shifted_idx(s + bit, shift)] ^= static_cast<uint8_t>((i >> bit) & 1U);
+        // }
+
+        // two contiguous xor spans
+        size_t start = shift + s;
+        if (start >= N) {
+            start -= N;
+        }
+
+        const size_t firstLen = std::min(len, N - start);
+        for (size_t bit = 0; bit < firstLen; ++bit) {
+            X[start + bit] ^= mask[bit];
+        }
+
+        if (firstLen < len) {
+            for (size_t bit = 0; bit < len - firstLen; ++bit) {
+                X[bit] ^= mask[firstLen + bit];
+            }
         }
     }
 
@@ -388,18 +548,48 @@ private:
 
 
 inline int permutation_Test() {
-    size_t n = 1600;
-    size_t N = n * 8;
-    size_t s = 800;
+    const size_t n = 1600;
+    const size_t N = n * 8;
 
-    ConstructionPermutation P(n, N, s, Keccak1600Adapter::pi, Keccak1600Adapter::pi_inv);
+    // old single case
+    // size_t s = 800;
+    // ConstructionPermutation P(n, N, s, Keccak1600Adapter::pi, Keccak1600Adapter::pi_inv);
+    // Bits X(N, 0);
+    // X[0] = 1;
+    // X[5] = 1;
+    // Bits Y = P.encrypt(X);
+    // Bits Z = P.decrypt(Y);
 
-    Bits X(N, 0);
-    X[0] = 1;
-    X[5] = 1;
+    // sparse and random cases
+    const std::array<size_t, 2> s_values{ 800, 1400 };
+    std::mt19937_64 rng(0xC001D00DuLL);
 
-    Bits Y = P.encrypt(X);
-    Bits Z = P.decrypt(Y);
+    for (size_t s : s_values) {
+        ConstructionPermutation P(n, N, s, Keccak1600Adapter::pi, Keccak1600Adapter::pi_inv);
+
+        Bits sparse(N, 0);
+        sparse[0] = 1;
+        sparse[5] = 1;
+        sparse[N - 1] = 1;
+        Bits sparse_enc = P.encrypt(sparse);
+        Bits sparse_dec = P.decrypt(sparse_enc);
+        if (sparse_dec != sparse) {
+            return 1;
+        }
+
+        for (size_t trial = 0; trial < 8; ++trial) {
+            Bits X(N, 0);
+            for (auto& bit : X) {
+                bit = static_cast<u8>(rng() & 1ULL);
+            }
+
+            Bits Y = P.encrypt(X);
+            Bits Z = P.decrypt(Y);
+            if (Z != X) {
+                return 10 + static_cast<int>(trial);
+            }
+        }
+    }
 
     return 0;
 }
