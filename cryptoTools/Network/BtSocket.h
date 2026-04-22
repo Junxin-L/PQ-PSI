@@ -10,6 +10,11 @@
 #include "Network/BtIOService.h"
 
 namespace osuCrypto { 
+    #if BOOST_VERSION >= 106600
+    using AsioStrand = boost::asio::io_context::strand;
+    #else
+    using AsioStrand = boost::asio::strand;
+    #endif
 
     class WinNetIOService;
     class ChannelBuffer;
@@ -71,7 +76,7 @@ namespace osuCrypto {
         BtSocket(BtIOService& ios);
 
         boost::asio::ip::tcp::socket mHandle;
-        boost::asio::strand mSendStrand, mRecvStrand;
+        AsioStrand mSendStrand, mRecvStrand;
 
         std::deque<BoostIOOperation> mSendQueue, mRecvQueue;
         bool mStopped;

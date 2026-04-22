@@ -4,7 +4,7 @@
 #include "Common/Log.h"
 #include "Common/Log1.h"
 #include <set>
-#include "okvs.h"
+#include "okvs/okvs.h"
 #include <Common/ByteStream.h>
 //#include "ObliviousDictionary.h"
 
@@ -47,6 +47,8 @@ inline void party1_encode(std::vector<block> inputSet, const std::vector<block> 
         PolyEncode(inputSet, setValues, okvsTable);
     else if (type_okvs == PaxosOkvs)
         PaxosEncode(inputSet, setValues, okvsTable, 128);
+    else if (type_okvs == RandomBandOkvs)
+        RandomBandOkvsEncode(inputSet, setValues, okvsTable);
 
     /*std::cout << IoStream::lock;
     for (u64 i = 0; i < 2; i++)
@@ -87,6 +89,8 @@ inline void party2_encode(const std::vector<block> inputSet, const block& aesKey
         PolyEncode(inputSet, setValues, okvsTable);
     else if (type_okvs == PaxosOkvs)
         PaxosEncode(inputSet, setValues, okvsTable, 128);
+    else if (type_okvs == RandomBandOkvs)
+        RandomBandOkvsEncode(inputSet, setValues, okvsTable);
 
     //if (type_okvs == PolyOkvs) //TODO
 }
@@ -115,6 +119,8 @@ inline void partyn1_decode(const std::vector<block> inputSet, const block& aesKe
             PolyDecode(okvsTables[idxParty], inputSet, setValues); // setValues[idxItem]=Decode(okvsTables[idxParty], x)
         else if (type_okvs == PaxosOkvs)
             PaxosDecode(okvsTables[idxParty], inputSet, setValues);
+        else if (type_okvs == RandomBandOkvs)
+            RandomBandOkvsDecode(okvsTables[idxParty], inputSet, setValues);
 
 
         for (u64 idxItem = 0; idxItem < inputSet.size(); ++idxItem) //compute xor all decode()
@@ -149,6 +155,8 @@ inline void partyn_decode(const std::vector<block> inputSet, const std::vector<b
         PolyDecode(okvsTable, inputSet, inputSet2PSI); //Decode(okvsTable, x) where okvsTable is received from party 1
     else if (type_okvs == PaxosOkvs)
         PaxosDecode(okvsTable, inputSet, inputSet2PSI);
+    else if (type_okvs == RandomBandOkvs)
+        RandomBandOkvsDecode(okvsTable, inputSet, inputSet2PSI);
 
 
     /*std::cout << IoStream::lock;
@@ -233,6 +241,8 @@ inline void partyO1(u64 myIdx, u64 nParties, u64 setSize, u64 type_okvs, u64 typ
         okvsTableSize = setSize;
     else if (type_okvs == PaxosOkvs)
         okvsTableSize = setSize;
+    else if (type_okvs == RandomBandOkvs)
+        okvsTableSize = RbOkvsTableSize(setSize);
 
     std::string name("psi");
     BtIOService ios(0);

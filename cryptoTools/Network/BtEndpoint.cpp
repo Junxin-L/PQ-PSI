@@ -32,8 +32,8 @@ namespace osuCrypto {
         else
         {
             boost::asio::ip::tcp::resolver resolver(mIOService->mIoService);
-            boost::asio::ip::tcp::resolver::query query(remoteIP, boost::lexical_cast<std::string>(port));
-            mRemoteAddr = *resolver.resolve(query);
+            auto results = resolver.resolve(remoteIP, boost::lexical_cast<std::string>(port));
+            mRemoteAddr = *results.begin();
         }
 
         std::lock_guard<std::mutex> lock(ioService.mMtx);

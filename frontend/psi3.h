@@ -4,7 +4,7 @@
 #include "Common/Log.h"
 #include "Common/Log1.h"
 #include <set>
-#include "okvs.h"
+#include "okvs/okvs.h"
 #include <fstream>
 #include <util.h>
 #include "Network/Channel.h"
@@ -34,6 +34,8 @@ inline void party_psi3(u64 myIdx, u64 setSize, u64 type_okvs, u64 type_security)
 			okvsTableSize = okvsLengthScale * setSize;
 		else if (type_okvs == PolyOkvs)
 			okvsTableSize = setSize;
+        else if (type_okvs == RandomBandOkvs)
+            okvsTableSize = RbOkvsTableSize(setSize);
 
 
 		std::string name("psi");

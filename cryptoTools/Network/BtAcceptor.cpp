@@ -42,10 +42,8 @@ namespace osuCrypto {
         mPort = port;
 
         boost::asio::ip::tcp::resolver resolver(mIOService.mIoService);
-        boost::asio::ip::tcp::resolver::query
-            query(ip, pStr);
-
-        mAddress = *resolver.resolve(query);
+        auto results = resolver.resolve(ip, pStr);
+        mAddress = *results.begin();
 
         mHandle.open(mAddress.protocol());
         mHandle.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
@@ -64,7 +62,7 @@ namespace osuCrypto {
         }
 
 
-        mHandle.listen(boost::asio::socket_base::max_connections);
+        mHandle.listen(boost::asio::socket_base::max_listen_connections);
     }
 
     void BtAcceptor::start() 

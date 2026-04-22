@@ -20,7 +20,7 @@ using namespace osuCrypto;
 #include <numeric>
 #include <iostream>
 #include "OtBinMain.v2.h"
-#include "okvs.h"
+#include "okvs/okvs.h"
 #include "Common/ByteStream.h"
 #include "o1party.h"
 #include "psi3.h"

@@ -5,7 +5,11 @@
 #include <vector>
 #include <thread>
 #include <NTL/BasicThreadPool.h>
+#if defined(__has_include)
+#if __has_include(<omp.h>)
 #include <omp.h>
+#endif
+#endif
 namespace osuCrypto
 {
 #define LEFT(X) (2*X+1)

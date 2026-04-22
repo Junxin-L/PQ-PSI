@@ -51,8 +51,10 @@ namespace osuCrypto
         auto routine = [&](u64 t, block extSeed, OtExtReceiver& otExt, Channel& chl)
         {
             // round up to the next 128 to make sure we aren't wasting OTs in the extension...
-            u64 start = std::min(roundUpTo(t *     mMessages.size() / chls.size(), 128), mMessages.size());
-            u64 end = std::min(roundUpTo((t + 1) * mMessages.size() / chls.size(), 128), mMessages.size());
+            const u64 msgCount = static_cast<u64>(mMessages.size());
+            const u64 chlCount = static_cast<u64>(chls.size());
+            u64 start = std::min(roundUpTo(t * msgCount / chlCount, 128), msgCount);
+            u64 end = std::min(roundUpTo((t + 1) * msgCount / chlCount, 128), msgCount);
 
             ArrayView<block> range(
                 mMessages.begin() + start,

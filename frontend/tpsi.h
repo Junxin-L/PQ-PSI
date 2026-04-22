@@ -4,7 +4,7 @@
 #include "Common/Log.h"
 #include "Common/Log1.h"
 #include <set>
-#include "okvs.h"
+#include "okvs/okvs.h"
 #include "util.h"
 
 using namespace osuCrypto;
@@ -47,6 +47,8 @@ inline void user_encode(std::vector<block> inputSet, const std::vector<block> ae
 		PolyEncode(inputSet, setValues, okvsTable);
     else if (type_okvs == PaxosOkvs)
         PaxosEncode(inputSet, setValues, okvsTable, 128);
+    else if (type_okvs == RandomBandOkvs)
+        RandomBandOkvsEncode(inputSet, setValues, okvsTable);
 
 	/*std::cout << IoStream::lock;
 	for (u64 i = 0; i < 2; i++)
@@ -85,6 +87,8 @@ inline void partyt_decode(const std::vector<block> inputSet, const std::vector <
 			PolyDecode(okvsTables[idxParty], hashInputSet, decodeValues); //Decode(okvsTable, x) where okvsTable is received from idxParty [0->t-1]
         else if (type_okvs == PaxosOkvs)
             PaxosDecode(okvsTables[idxParty], hashInputSet, decodeValues); //Decode(okvsTable, x) where okvsTable is received from idxParty [0->t-1]
+        else if (type_okvs == RandomBandOkvs)
+            RandomBandOkvsDecode(okvsTables[idxParty], hashInputSet, decodeValues);
 	
 		for (u64 idxItem = 0; idxItem < inputSet.size(); ++idxItem)
 			inputSet2ZeroXOR[idxItem] = decodeValues[idxItem] ^ inputSet2ZeroXOR[idxItem];  //xor all values 
@@ -112,6 +116,8 @@ inline void partyt_decode(std::vector<block> inputSet, const std::vector<block> 
 			PolyDecode(okvsTable, inputSet, decodeValues); //Decode(okvsTable, x) where okvsTable is received from idxParty [0->t-1]
         else if (type_okvs == PaxosOkvs)
             PaxosDecode(okvsTable, inputSet, decodeValues); //Decode(okvsTable, x) where okvsTable is received from idxParty [0->t-1]
+        else if (type_okvs == RandomBandOkvs)
+            RandomBandOkvsDecode(okvsTable, inputSet, decodeValues);
 		
 	}
 
@@ -570,6 +576,8 @@ inline void tpsi_party( u64 myIdx, u64 nParties, u64 threshold, u64 setSize, u64
 		okvsTableSize = setSize;
     else if (type_okvs == PaxosOkvs)
         okvsTableSize = setSize;
+    else if (type_okvs == RandomBandOkvs)
+        okvsTableSize = RbOkvsTableSize(setSize);
 
 
 	std::string name("psi");
@@ -932,4 +940,3 @@ inline void tpsi_zeroXOR_test(u64 type_okvs, u64 type_security)
 	for (u64 pIdx = 0; pIdx < pThrds.size(); ++pIdx)
 		pThrds[pIdx].join();
 }
-

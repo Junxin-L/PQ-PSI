@@ -13,12 +13,12 @@ using namespace osuCrypto;
 
 #include <numeric>
 #include "Common/Log.h"
-#include "okvs.h"
+#include "okvs/okvs.h"
 #include "o1party.h"
 #include "tpsi.h"
 #include "psi3.h"
-#include <pqpsi.h>
-#include <permutation.h>
+#include "pqpsi/pqpsi.h"
+#include "pqpsi/permutation.h"
 
 //int miraclTestMain();
 

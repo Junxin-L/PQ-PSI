@@ -1,4 +1,4 @@
-#include "frontend/permutation.h"
+#include "pqpsi/permutation.h"
 
 #include <algorithm>
 #include <chrono>
@@ -182,7 +182,7 @@ int main(int argc, char** argv)
 	out << "hw_threads: " << std::thread::hardware_concurrency() << "\n";
 	out << "compiler: " << __VERSION__ << "\n";
 	out << "keccak_backend: thirdparty/KeccakTools/Sources/Keccak-f.*\n";
-	out << "what_is_measured: permutation.h ConstructionPermutation encrypt/decrypt final parameters with s=" << sBits << "\n";
+	out << "what_is_measured: frontend/pqpsi/permutation.h ConstructionPermutation encrypt/decrypt final parameters with s=" << sBits << "\n";
 	out << "selected_s_bits: " << sBits << "\n";
 	out << "arch_note: run under x86_64 if on Apple Silicon\n";
 	out << "\n";

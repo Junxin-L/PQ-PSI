@@ -15,6 +15,37 @@
 
 namespace osuCrypto
 {
+    namespace
+    {
+        std::unique_ptr<AsioWorkGuard> makeAsioWorkGuard(AsioIOService& io)
+        {
+        #if BOOST_VERSION >= 106600
+            return std::unique_ptr<AsioWorkGuard>(new AsioWorkGuard(boost::asio::make_work_guard(io)));
+        #else
+            return std::unique_ptr<AsioWorkGuard>(new AsioWorkGuard(io));
+        #endif
+        }
+
+        template<typename Strand, typename Fn>
+        void strandDispatch(Strand& s, Fn&& fn)
+        {
+        #if BOOST_VERSION >= 106600
+            boost::asio::dispatch(s, std::forward<Fn>(fn));
+        #else
+            s.dispatch(std::forward<Fn>(fn));
+        #endif
+        }
+
+        template<typename Strand, typename Fn>
+        void strandPost(Strand& s, Fn&& fn)
+        {
+        #if BOOST_VERSION >= 106600
+            boost::asio::post(s, std::forward<Fn>(fn));
+        #else
+            s.post(std::forward<Fn>(fn));
+        #endif
+        }
+    }
 
     extern void split(const std::string &s, char delim, std::vector<std::string> &elems);
     extern std::vector<std::string> split(const std::string &s, char delim);
@@ -22,7 +53,7 @@ namespace osuCrypto
     BtIOService::BtIOService(u64 numThreads)
         :
         mIoService(),
-        mWorker(new boost::asio::io_service::work(mIoService)),
+        mWorker(makeAsioWorkGuard(mIoService)),
         mStopped(false)
     {
 
@@ -177,7 +208,7 @@ namespace osuCrypto
 
                     delete op.mPromise;
 
-                    socket->mRecvStrand.dispatch([socket, this]()
+                    strandDispatch(socket->mRecvStrand, [socket, this]()
                     {
                         ////////////////////////////////////////////////////////////////////////////////
                         //// This is within the stand. We have sequential access to the recv queue. ////
@@ -260,7 +291,7 @@ namespace osuCrypto
                 //if (op->mCallback)
                 //    op->mCallback();
 
-                socket->mSendStrand.dispatch([socket, this]()
+                strandDispatch(socket->mSendStrand, [socket, this]()
                 {
                     ////////////////////////////////////////////////////////////////////////////////
                     //// This is within the stand. We have sequential access to the send queue. ////
@@ -311,7 +342,7 @@ namespace osuCrypto
         {
 
             // a strand is like a lock. Stuff posted (or dispatched) to a strand will be executed sequentially
-            socket->mRecvStrand.post([this, socket, op]()
+            strandPost(socket->mRecvStrand, [this, socket, op]()
             {
                 // the queue must be guarded from concurrent access, so add the op within the strand
                 socket->mTotalRecvData += op.mSize;
@@ -342,7 +373,7 @@ namespace osuCrypto
         {
 
             // a strand is like a lock. Stuff posted (or dispatched) to a strand will be executed sequentially
-            socket->mSendStrand.post([this, socket, op]()
+            strandPost(socket->mSendStrand, [this, socket, op]()
             {
                 // the queue must be guarded from concurrent access, so add the op within the strand
 

@@ -3,7 +3,7 @@
 project(cryptoTools)
 
 
-if($ENV{nasm} MATCHES "")
+if(1)
 	message(WARNING "\nnasm environment variable NOT defined!!!! This means the fast SHA1 function will not be used.")
 
 	# define this so that the asm is disabled.
@@ -65,13 +65,13 @@ set(Boost_USE_STATIC_LIBS        ON) # only find static libs
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME     ON)
 
-find_package(Boost  COMPONENTS system thread)
+find_package(Boost REQUIRED)
 
 if(Boost_FOUND)
-  include_directories(${Boost_INCLUDE_DIR}) 
+  include_directories(${Boost_INCLUDE_DIRS}) 
   #message( "Found Boost at ${Boost_LIBRARIES}")
 else()
-   message(FATAL_ERROR "Failed to find boost at " ${Boost_Lib_Dirs} " Need system thread")
+   message(FATAL_ERROR "Failed to find boost at " ${Boost_Lib_Dirs})
 endif()
 
 

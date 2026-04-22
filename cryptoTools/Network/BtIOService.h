@@ -12,6 +12,7 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 #include "boost/asio.hpp"
+#include "boost/version.hpp"
 #ifndef _MSC_VER
 #pragma GCC diagnostic pop
 #endif
@@ -22,6 +23,13 @@
 
 namespace osuCrypto 
 {
+    #if BOOST_VERSION >= 106600
+    using AsioIOService = boost::asio::io_context;
+    using AsioWorkGuard = boost::asio::executor_work_guard<AsioIOService::executor_type>;
+    #else
+    using AsioIOService = boost::asio::io_service;
+    using AsioWorkGuard = boost::asio::io_service::work;
+    #endif
 
     class BadReceiveBufferSize : public std::exception
     {
@@ -68,9 +76,9 @@ namespace osuCrypto
         ~BtIOService();
         
         /// /// <summary> This is a Windows specific object that is used to queue up pending network IO operations.</summary>
-        boost::asio::io_service mIoService;
+        AsioIOService mIoService;
 
-        std::unique_ptr<boost::asio::io_service::work> mWorker;
+        std::unique_ptr<AsioWorkGuard> mWorker;
 
 
         /// <summary> This list hold the threads that send and recv messages. </summary>

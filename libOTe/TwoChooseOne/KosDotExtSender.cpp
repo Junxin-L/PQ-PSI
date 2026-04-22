@@ -130,7 +130,7 @@ namespace osuCrypto
 
 
 
-                u64 colStop = std::min((colStepIdx + 1) * 128, mGens.size());
+                u64 colStop = std::min((colStepIdx + 1) * 128, static_cast<u64>(mGens.size()));
 
                 // transpose 128 columns at at time. Each column will be 128 * superBlkSize = 1024 bits long.
                 for (u64 colIdx = colStepIdx * 128; colIdx < colStop; ++colIdx)
