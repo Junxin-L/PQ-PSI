@@ -80,6 +80,43 @@ namespace
 		}
 	}
 
+	//// (k, v) -> (k, H_expand(k) ⊕ Π(v))
+	std::vector<u8> hashExpandKeyBytes(const block& key, u64 outBytes)
+	{
+		std::vector<u8> out(outBytes);
+		AES h(key);
+
+		u64 off = 0;
+		u64 ctr = 1;
+		while (off < outBytes)
+		{
+			const block in = toBlock(0, ctr);
+			const block y = h.ecbEncBlock(in);
+			const u64 take = std::min<u64>(sizeof(block), outBytes - off);
+			std::memcpy(out.data() + off, &y, take);
+			off += take;
+			++ctr;
+		}
+
+		return out;
+	}
+
+	void xorHashedKeyIntoRow(const block& key, std::vector<block>& row)
+	{
+		if (row.size() != KEM_key_block_size)
+		{
+			throw std::invalid_argument("xorHashedKeyIntoRow: wrong row block count");
+		}
+
+		const u64 rowBytes = static_cast<u64>(row.size() * sizeof(block));
+		auto h = hashExpandKeyBytes(key, rowBytes);
+		u8* rowPtr = reinterpret_cast<u8*>(row.data());
+		for (u64 i = 0; i < rowBytes; ++i)
+		{
+			rowPtr[i] ^= h[i];
+		}
+	}
+
 	//// bit vector -> block row
 	void bitsToBlocks(const Bits& in, block* out)
 	{
@@ -504,7 +541,7 @@ void pqpsi(
 			for (size_t i = begin; i < end; ++i)
 			{
 				encryptKemKeyToRow(P, recv_pk[i], setValues[i], encBuf);
-				//TODO: need to xor with H(key) -- currently, the size is different
+				xorHashedKeyIntoRow(inputSet[i], setValues[i]);
 			}
 		});
 		const auto tPermutePk1 = Clock::now();
@@ -573,6 +610,8 @@ void pqpsi(
 			decBuf.reserve(KEM_key_size_bit);
 			for (size_t i = begin; i < end; ++i)
 			{
+				//// Π(v) = (H(k) ⊕ Π(v)) ⊕ H(k)
+				xorHashedKeyIntoRow(inputSet[i], setValues2[i]);
 				decryptKemRow(P, setValues2[i], decBuf);
 			}
 		});
@@ -629,6 +668,8 @@ void pqpsi(
 			decBuf.reserve(KEM_key_size_bit);
 			for (size_t i = begin; i < end; ++i)
 			{
+				//// Π(v) = (H(k) ⊕ Π(v)) ⊕ H(k)
+				xorHashedKeyIntoRow(inputSet[i], setValues[i]);
 				decryptKemRow(P, setValues[i], decBuf);
 			}
 		});
@@ -652,7 +693,7 @@ void pqpsi(
 			for (size_t i = begin; i < end; ++i)
 			{
 				encryptKemKeyToRow(P, sender_pk[i], setValues2[i], encBuf);
-				//TODO: need to xor with H(key) -- currently, the size is different
+				xorHashedKeyIntoRow(inputSet[i], setValues2[i]);
 			}
 		});
 		const auto tPermuteCt1 = Clock::now();
