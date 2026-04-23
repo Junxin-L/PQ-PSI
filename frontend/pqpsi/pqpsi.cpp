@@ -24,13 +24,13 @@ using namespace osuCrypto;
 
 namespace
 {
-	//// obf-mlkem mode pinned to 1024
+	// obf-mlkem mode pinned to 1024
 	constexpr MlKem::Mode kMode = MlKem::Mode::MlKem512;
 	constexpr u64 kKemBytes = KEM_key_block_size * sizeof(block);
 	constexpr u64 kSeedBytes = MlKem::KeyGenSeedSize;
 	constexpr u64 kEncodeKeyMaxTries = 64;
 
-	//// row <-> byte view helper
+	// row <-> byte 
 	std::array<u8, kKemBytes> keyToBytes(const kemKey& in)
 	{
 		std::array<u8, kKemBytes> out{};
@@ -573,6 +573,7 @@ void pqpsi(
 		chls[1][0]->send(flat.data(), sendBytes1);
 		const auto tSend1_1 = Clock::now();
 		localStage.networkSendMs += asMs(tSend1_0, tSend1_1);
+		localStage.networkSendBytes += static_cast<double>(sendBytes1);
 		trace("receiver send okvs1 done");
 		
 
@@ -583,9 +584,11 @@ void pqpsi(
 
 		trace("receiver recv okvs2 start");
 		const auto tRecv2_0 = Clock::now();
-		chls[1][0]->recv(flat.data(), flat.size() * sizeof(block));
+		const u64 recvBytes2 = static_cast<u64>(flat.size() * sizeof(block));
+		chls[1][0]->recv(flat.data(), recvBytes2);
 		const auto tRecv2_1 = Clock::now();
 		localStage.networkRecvMs += asMs(tRecv2_0, tRecv2_1);
+		localStage.networkRecvBytes += static_cast<double>(recvBytes2);
 		trace("receiver recv okvs2 done");
 		
 		for (size_t j = 0; j < okvsTableSize; ++j) {
@@ -638,9 +641,11 @@ void pqpsi(
 		std::vector<block> recv_flat(okvsTableSize * rowOkvsBlkSize);
 		trace("sender recv okvs1 start");
 		const auto tRecv1_0 = Clock::now();
-		chls[0][0]->recv(recv_flat.data(), recv_flat.size() * sizeof(block));
+		const u64 recvBytes1 = static_cast<u64>(recv_flat.size() * sizeof(block));
+		chls[0][0]->recv(recv_flat.data(), recvBytes1);
 		const auto tRecv1_1 = Clock::now();
 		localStage.networkRecvMs += asMs(tRecv1_0, tRecv1_1);
+		localStage.networkRecvBytes += static_cast<double>(recvBytes1);
 		trace("sender recv okvs1 done");
 
 		std::vector<std::vector<block>> okvsTable(okvsTableSize,
@@ -722,6 +727,7 @@ void pqpsi(
 		chls[0][0]->send(recv_flat.data(), sendBytes2);
 		const auto tSend2_1 = Clock::now();
 		localStage.networkSendMs += asMs(tSend2_0, tSend2_1);
+		localStage.networkSendBytes += static_cast<double>(sendBytes2);
 		trace("sender send okvs2 done");
 
 	}

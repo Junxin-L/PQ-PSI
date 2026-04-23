@@ -18,6 +18,8 @@ struct PqPsiStageMs
 	double okvsDecodeMs = 0.0;
 	double networkSendMs = 0.0;
 	double networkRecvMs = 0.0;
+	double networkSendBytes = 0.0;
+	double networkRecvBytes = 0.0;
 	double kemCoreMs = 0.0; // encaps or decaps
 	double permDecryptMs = 0.0;
 };

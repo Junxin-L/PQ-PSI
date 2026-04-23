@@ -8,11 +8,30 @@
 
 
 #include <sstream>
+#include <cstdlib>
 
 namespace osuCrypto {
 
     //extern std::vector<std::string> split(const std::string &s, char delim);
-        
+    namespace
+    {
+        int getEnvInt(const char* key, int fallback)
+        {
+            const char* v = std::getenv(key);
+            if (v == nullptr || *v == '\0')
+            {
+                return fallback;
+            }
+            try
+            {
+                return std::stoi(v);
+            }
+            catch (...)
+            {
+                return fallback;
+            }
+        }
+    }
 
     void BtEndpoint::start(BtIOService& ioService, std::string remoteIP, u32 port, bool host, std::string name)
     {
@@ -98,19 +117,45 @@ namespace osuCrypto {
             chl.mSocket.reset(new BtSocket(*mIOService));
 
             boost::system::error_code ec;
-            auto tryCount = 10000000;
+            const int retrySleepMs = std::max(1, getEnvInt("BT_CONNECT_RETRY_SLEEP_MS", 5));
+            int tryCount = std::max(1, getEnvInt("BT_CONNECT_RETRY_MAX", 1200));
 
+            boost::system::error_code ecOpen;
+            chl.mSocket->mHandle.open(mRemoteAddr.protocol(), ecOpen);
+            if (ecOpen)
+            {
+                std::ostringstream oss;
+                oss << "BtEndpoint socket open failed at " << LOCATION
+                    << " ip=" << mIP
+                    << " port=" << mPort
+                    << " ec=" << ecOpen.message();
+                throw std::runtime_error(oss.str());
+            }
             chl.mSocket->mHandle.connect(mRemoteAddr, ec);
 
             while (tryCount-- && ec)
             {
+                boost::system::error_code ecClose;
+                chl.mSocket->mHandle.close(ecClose);
+                boost::system::error_code ecReopen;
+                chl.mSocket->mHandle.open(mRemoteAddr.protocol(), ecReopen);
+                if (ecReopen)
+                {
+                    ec = ecReopen;
+                    break;
+                }
                 chl.mSocket->mHandle.connect(mRemoteAddr, ec);
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(retrySleepMs));
             }
 
             if (ec)
             {
-                throw std::runtime_error("rt error at " LOCATION);
+                std::ostringstream oss;
+                oss << "BtEndpoint connect timeout at " << LOCATION
+                    << " ip=" << mIP
+                    << " port=" << mPort
+                    << " ec=" << ec.message();
+                throw std::runtime_error(oss.str());
             }
 
             boost::asio::ip::tcp::no_delay option(true);

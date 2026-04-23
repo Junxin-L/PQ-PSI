@@ -15,6 +15,12 @@
 #include <vector>
 
 #include <sys/utsname.h>
+#if !defined(_WIN32)
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
 #endif
@@ -211,11 +217,33 @@ namespace
 		std::strtod(s, &end);
 		return end != s && end != nullptr && *end == '\0';
 	}
+
+	bool canBindLoopbackPort(u32 port)
+	{
+#if defined(_WIN32)
+		(void)port;
+		return true;
+#else
+		const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+		if (fd < 0)
+		{
+			return false;
+		}
+
+		sockaddr_in addr{};
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		addr.sin_port = htons(static_cast<uint16_t>(port));
+		const int rc = ::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+		::close(fd);
+		return rc == 0;
+#endif
+	}
 }
 
 int main(int argc, char** argv)
 {
-	const std::string outPath = (argc > 1) ? argv[1] : "build-x86/pqpsi_rbokvs_benchmark.txt";
+	const std::string outPath = (argc > 1) ? argv[1] : "build-x86/benchmarks/pqpsi_rbokvs/pqpsi_rbokvs_benchmark_latest.md";
 	const u64 setSize = (argc > 2) ? parseU64(argv[2], 64) : 64;
 	const u64 warmups = (argc > 3) ? parseU64(argv[3], 1) : 1;
 	const u64 rounds = (argc > 4) ? parseU64(argv[4], 5) : 5;
@@ -252,10 +280,12 @@ int main(int argc, char** argv)
 	runUs.reserve(rounds);
 	std::vector<double> p0TotalMs, p0KemKeyGenMs, p0PermuteMs, p0OkvsEncMs, p0OkvsDecMs, p0SendMs, p0RecvMs, p0KemCoreMs, p0PermDecMs;
 	std::vector<double> p1TotalMs, p1KemKeyGenMs, p1PermuteMs, p1OkvsEncMs, p1OkvsDecMs, p1SendMs, p1RecvMs, p1KemCoreMs, p1PermDecMs;
+	std::vector<double> p0SendBytes, p0RecvBytes, p1SendBytes, p1RecvBytes;
 	p0TotalMs.reserve(rounds); p0KemKeyGenMs.reserve(rounds); p0PermuteMs.reserve(rounds); p0OkvsEncMs.reserve(rounds);
 	p0OkvsDecMs.reserve(rounds); p0SendMs.reserve(rounds); p0RecvMs.reserve(rounds); p0KemCoreMs.reserve(rounds); p0PermDecMs.reserve(rounds);
 	p1TotalMs.reserve(rounds); p1KemKeyGenMs.reserve(rounds); p1PermuteMs.reserve(rounds); p1OkvsEncMs.reserve(rounds);
 	p1OkvsDecMs.reserve(rounds); p1SendMs.reserve(rounds); p1RecvMs.reserve(rounds); p1KemCoreMs.reserve(rounds); p1PermDecMs.reserve(rounds);
+	p0SendBytes.reserve(rounds); p0RecvBytes.reserve(rounds); p1SendBytes.reserve(rounds); p1RecvBytes.reserve(rounds);
 
 	u64 passCount = 0;
 	u64 failCount = 0;
@@ -276,6 +306,13 @@ int main(int argc, char** argv)
 		while (!done && tryIdx <= maxPortRetriesPerRound)
 		{
 			const u64 portBase = portBaseSeed + i * 17 + tryIdx * 101;
+			const u64 endpointPort = portBase + 1;
+			if (!canBindLoopbackPort(static_cast<u32>(endpointPort)))
+			{
+				++portRetryCount;
+				++tryIdx;
+				continue;
+			}
 			const std::string portBaseStr = std::to_string(portBase);
 			const std::string runTagStr = std::to_string(i) + "_" + std::to_string(tryIdx) + "_" + portBaseStr;
 			const std::string simDelayStr = std::to_string(simDelayMs);
@@ -296,7 +333,8 @@ int main(int argc, char** argv)
 			catch (const std::runtime_error& e)
 			{
 				const std::string msg = e.what();
-				if (msg.find("Address already in use") != std::string::npos)
+				if (msg.find("Address already in use") != std::string::npos ||
+					msg.find("BtEndpoint connect timeout") != std::string::npos)
 				{
 					++portRetryCount;
 					++tryIdx;
@@ -322,6 +360,8 @@ int main(int argc, char** argv)
 			p0OkvsDecMs.push_back(profile.party0.okvsDecodeMs);
 			p0SendMs.push_back(profile.party0.networkSendMs);
 			p0RecvMs.push_back(profile.party0.networkRecvMs);
+			p0SendBytes.push_back(profile.party0.networkSendBytes);
+			p0RecvBytes.push_back(profile.party0.networkRecvBytes);
 			p0KemCoreMs.push_back(profile.party0.kemCoreMs);
 			p0PermDecMs.push_back(profile.party0.permDecryptMs);
 			p1TotalMs.push_back(profile.party1.totalMs);
@@ -331,6 +371,8 @@ int main(int argc, char** argv)
 			p1OkvsDecMs.push_back(profile.party1.okvsDecodeMs);
 			p1SendMs.push_back(profile.party1.networkSendMs);
 			p1RecvMs.push_back(profile.party1.networkRecvMs);
+			p1SendBytes.push_back(profile.party1.networkSendBytes);
+			p1RecvBytes.push_back(profile.party1.networkRecvBytes);
 			p1KemCoreMs.push_back(profile.party1.kemCoreMs);
 			p1PermDecMs.push_back(profile.party1.permDecryptMs);
 
@@ -366,6 +408,10 @@ int main(int argc, char** argv)
 	const auto p1OkvsDec = summarize(p1OkvsDecMs);
 	const auto p1Send = summarize(p1SendMs);
 	const auto p1Recv = summarize(p1RecvMs);
+	const auto p0TxBytes = summarize(p0SendBytes);
+	const auto p0RxBytes = summarize(p0RecvBytes);
+	const auto p1TxBytes = summarize(p1SendBytes);
+	const auto p1RxBytes = summarize(p1RecvBytes);
 	const auto p1KemCore = summarize(p1KemCoreMs);
 	const auto p1PermDec = summarize(p1PermDecMs);
 
@@ -376,58 +422,40 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	out << "PQPSI RB-OKVS benchmark\n";
-	out << "timestamp: " << nowIsoLike() << "\n";
-	out << "host_uname: " << unameLine() << "\n";
-	out << "cpu_model: " << cpuModel() << "\n";
-	out << "hw_threads: " << std::thread::hardware_concurrency() << "\n";
-	out << "compiler: " << __VERSION__ << "\n";
-#if defined(NDEBUG)
-	out << "build_mode: release\n";
-#else
-	out << "build_mode: debug\n";
-#endif
-	out << "\n";
-
-	out << "protocol_config\n";
-	out << "parties: 2\n";
-	out << "kem_mode: MlKem512\n";
-	out << "okvs_type: RandomBandOkvs\n";
-	out << "set_size_per_party: " << setSize << "\n";
-	out << "\n";
-
-	out << "network_config\n";
-	out << "transport: BtEndpoint over local loopback\n";
-	out << "host: localhost\n";
-	out << "network_type: " << netType << "\n";
-	out << "network_topology: " << netTopology << "\n";
-	out << "link_speed: " << linkSpeed << "\n";
-	out << "network_note: " << netNote << "\n";
-	out << "network_settings_file: " << (netSettingsPath.empty() ? "none" : netSettingsPath) << "\n";
-	out << "sim_net_delay_ms: " << simDelayMs << "\n";
-	out << "sim_net_bw_MBps: " << simBwMBps << "\n";
-	out << "port_base_seed: " << portBaseSeed << "\n";
-	out << "per_round_port_step: 17\n";
-	out << "port_retry_step: 101\n";
-	out << "port_retry_total: " << portRetryCount << "\n";
-	out << "trace_output: disabled (PQPSI_TRACE=0)\n";
-	out << "note: benchmark process does not auto-measure physical link speed\n";
-	out << "\n";
-
-	out << "benchmark_config\n";
-	out << "warmup_rounds: " << warmups << "\n";
-	out << "measured_rounds: " << rounds << "\n";
-	out << "timing_unit_primary: ms\n";
-	out << "\n";
+	out << "# PQPSI RB-OKVS Benchmark\n\n";
 
 	out << std::fixed << std::setprecision(2);
-	out << "runtime_mean_ms: " << (stats.mean / 1000.0) << "\n";
-	out << "runtime_median_ms: " << (stats.median / 1000.0) << "\n";
-	out << "runtime_p95_ms: " << (stats.p95 / 1000.0) << "\n";
-	out << "runtime_p99_ms: " << (stats.p99 / 1000.0) << "\n";
-	out << "runtime_min_ms: " << (stats.min / 1000.0) << "\n";
-	out << "runtime_max_ms: " << (stats.max / 1000.0) << "\n";
+
+	const double runtimeMeanMs = (stats.mean / 1000.0);
+	const double runtimeMedianMs = (stats.median / 1000.0);
+	const double runtimeP95Ms = (stats.p95 / 1000.0);
+	const double runtimeP99Ms = (stats.p99 / 1000.0);
+	const double runtimeMinMs = (stats.min / 1000.0);
+	const double runtimeMaxMs = (stats.max / 1000.0);
+	const double totalCommBytesMean = p0TxBytes.mean + p1TxBytes.mean;
+
+	out << "## Summary\n";
+	out << "| item | value |\n";
+	out << "|---|---:|\n";
+	out << "| set_size_per_party | " << setSize << " |\n";
+	out << "| measured_rounds | " << rounds << " |\n";
+	out << "| sim_net_delay_ms | " << simDelayMs << " |\n";
+	out << "| sim_net_bw_MBps | " << simBwMBps << " |\n";
+	out << "| runtime_mean_ms | " << runtimeMeanMs << " |\n";
+	out << "| runtime_p95_ms | " << runtimeP95Ms << " |\n";
+	out << "| total_communication_kb_mean | " << (totalCommBytesMean / 1024.0) << " |\n";
+	out << "| overall_status | " << ((failCount == 0 && mismatchCount == 0) ? "ok" : "needs_check") << " |\n";
 	out << "\n";
+
+	out << "## Communication\n";
+	out << "| party | tx_kb_mean | rx_kb_mean | tx+rx_kb_mean |\n";
+	out << "|---|---:|---:|---:|\n";
+	out << "| party0 | " << (p0TxBytes.mean / 1024.0) << " | " << (p0RxBytes.mean / 1024.0) << " | " << ((p0TxBytes.mean + p0RxBytes.mean) / 1024.0) << " |\n";
+	out << "| party1 | " << (p1TxBytes.mean / 1024.0) << " | " << (p1RxBytes.mean / 1024.0) << " | " << ((p1TxBytes.mean + p1RxBytes.mean) / 1024.0) << " |\n";
+	out << "| total_over_wire | " << (totalCommBytesMean / 1024.0) << " | - | " << (totalCommBytesMean / 1024.0) << " |\n";
+	out << "\n";
+
+	out << "## Party Results\n";
 
 	auto pct = [](double part, double whole)
 	{
@@ -435,7 +463,7 @@ int main(int argc, char** argv)
 		return (part * 100.0) / whole;
 	};
 
-	auto printPartyHuman = [&](const char* partyName,
+	auto printPartyTable = [&](const char* partyName,
 		const StatsUs& total,
 		const StatsUs& kemKeyGen,
 		const StatsUs& permute,
@@ -446,27 +474,75 @@ int main(int argc, char** argv)
 		const StatsUs& kemCore,
 		const StatsUs& permDec)
 	{
-		out << partyName << " (mean total " << total.mean << " ms)\n";
-		out << "  keygen: " << kemKeyGen.mean << " ms (" << pct(kemKeyGen.mean, total.mean) << "%)\n";
-		out << "  permute: " << permute.mean << " ms (" << pct(permute.mean, total.mean) << "%)\n";
-		out << "  permute_inverse: " << permDec.mean << " ms (" << pct(permDec.mean, total.mean) << "%)\n";
-		out << "  kem_ops (Encaps/Decaps): " << kemCore.mean << " ms (" << pct(kemCore.mean, total.mean) << "%)\n";
-		out << "  okvs_encode: " << okvsEnc.mean << " ms (" << pct(okvsEnc.mean, total.mean) << "%)\n";
-		out << "  okvs_decode: " << okvsDec.mean << " ms (" << pct(okvsDec.mean, total.mean) << "%)\n";
-		out << "  network_send (socket send + simulated net delay if enabled): " << netSend.mean << " ms (" << pct(netSend.mean, total.mean) << "%)\n";
-		out << "  network_recv (socket recv wait): " << netRecv.mean << " ms (" << pct(netRecv.mean, total.mean) << "%)\n";
-
+		out << "### " << partyName << " (mean total " << total.mean << " ms)\n";
+		out << "| stage | mean_ms | pct_total |\n";
+		out << "|---|---:|---:|\n";
+		out << "| keygen | " << kemKeyGen.mean << " | " << pct(kemKeyGen.mean, total.mean) << "% |\n";
+		out << "| permute | " << permute.mean << " | " << pct(permute.mean, total.mean) << "% |\n";
+		out << "| permute_inverse | " << permDec.mean << " | " << pct(permDec.mean, total.mean) << "% |\n";
+		out << "| kem_ops (Encaps/Decaps) | " << kemCore.mean << " | " << pct(kemCore.mean, total.mean) << "% |\n";
+		out << "| okvs_encode | " << okvsEnc.mean << " | " << pct(okvsEnc.mean, total.mean) << "% |\n";
+		out << "| okvs_decode | " << okvsDec.mean << " | " << pct(okvsDec.mean, total.mean) << "% |\n";
+		out << "| network_send (socket send + simulated net delay if enabled) | " << netSend.mean << " | " << pct(netSend.mean, total.mean) << "% |\n";
+		out << "| network_recv (socket recv wait) | " << netRecv.mean << " | " << pct(netRecv.mean, total.mean) << "% |\n";
 		out << "\n";
 	};
 
-	printPartyHuman("party0", p0Total, p0KemKeyGen, p0Permute, p0OkvsEnc, p0OkvsDec, p0Send, p0Recv, p0KemCore, p0PermDec);
-	printPartyHuman("party1", p1Total, p1KemKeyGen, p1Permute, p1OkvsEnc, p1OkvsDec, p1Send, p1Recv, p1KemCore, p1PermDec);
+	printPartyTable("party0", p0Total, p0KemKeyGen, p0Permute, p0OkvsEnc, p0OkvsDec, p0Send, p0Recv, p0KemCore, p0PermDec);
+	printPartyTable("party1", p1Total, p1KemKeyGen, p1Permute, p1OkvsEnc, p1OkvsDec, p1Send, p1Recv, p1KemCore, p1PermDec);
 
-	out << std::setprecision(0);
-	out << "correctness_pass_rounds: " << passCount << "\n";
-	out << "correctness_fail_rounds: " << failCount << "\n";
-	out << "intersection_mismatch_rounds: " << mismatchCount << "\n";
-	out << "overall_status: " << ((failCount == 0 && mismatchCount == 0) ? "ok" : "needs_check") << "\n";
+	out << "## Runtime Distribution\n";
+	out << "| metric | ms |\n";
+	out << "|---|---:|\n";
+	out << "| runtime_mean_ms | " << runtimeMeanMs << " |\n";
+	out << "| runtime_median_ms | " << runtimeMedianMs << " |\n";
+	out << "| runtime_p95_ms | " << runtimeP95Ms << " |\n";
+	out << "| runtime_p99_ms | " << runtimeP99Ms << " |\n";
+	out << "| runtime_min_ms | " << runtimeMinMs << " |\n";
+	out << "| runtime_max_ms | " << runtimeMaxMs << " |\n";
+	out << "\n";
+
+	out << "## Correctness\n";
+	out << "| metric | value |\n";
+	out << "|---|---:|\n";
+	out << "| correctness_pass_rounds | " << passCount << " |\n";
+	out << "| correctness_fail_rounds | " << failCount << " |\n";
+	out << "| intersection_mismatch_rounds | " << mismatchCount << " |\n";
+	out << "| overall_status | " << ((failCount == 0 && mismatchCount == 0) ? "ok" : "needs_check") << " |\n";
+	out << "\n";
+
+	out << "## Details (Environment & Config)\n";
+	out << "| item | value |\n";
+	out << "|---|---|\n";
+	out << "| timestamp | " << nowIsoLike() << " |\n";
+	out << "| host_uname | " << unameLine() << " |\n";
+	out << "| cpu_model | " << cpuModel() << " |\n";
+	out << "| hw_threads | " << std::thread::hardware_concurrency() << " |\n";
+	out << "| compiler | " << __VERSION__ << " |\n";
+#if defined(NDEBUG)
+	out << "| build_mode | release |\n";
+#else
+	out << "| build_mode | debug |\n";
+#endif
+	out << "| parties | 2 |\n";
+	out << "| kem_mode | MlKem512 |\n";
+	out << "| okvs_type | RandomBandOkvs |\n";
+	out << "| transport | BtEndpoint over local loopback |\n";
+	out << "| host | localhost |\n";
+	out << "| network_type | " << netType << " |\n";
+	out << "| network_topology | " << netTopology << " |\n";
+	out << "| link_speed | " << linkSpeed << " |\n";
+	out << "| network_note | " << netNote << " |\n";
+	out << "| network_settings_file | " << (netSettingsPath.empty() ? "none" : netSettingsPath) << " |\n";
+	out << "| port_base_seed | " << portBaseSeed << " |\n";
+	out << "| per_round_port_step | 17 |\n";
+	out << "| port_retry_step | 101 |\n";
+	out << "| port_retry_total | " << portRetryCount << " |\n";
+	out << "| warmup_rounds | " << warmups << " |\n";
+	out << "| measured_rounds | " << rounds << " |\n";
+	out << "| timing_unit_primary | ms |\n";
+	out << "| trace_output | disabled (PQPSI_TRACE=0) |\n";
+	out << "| note | benchmark process does not auto-measure physical link speed |\n";
 
 	out.close();
 	std::cout << "wrote benchmark report: " << outPath << "\n";
