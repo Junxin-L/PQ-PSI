@@ -1,4 +1,4 @@
-#include "pqpsi/permutation.h"
+#include "pqpsi/pi.h"
 
 #include <algorithm>
 #include <chrono>
@@ -104,22 +104,16 @@ int main(int argc, char** argv)
 {
 	const std::string outPath = (argc > 1) ? argv[1] : "build-x86/construction_permutation_benchmark.txt";
 
-	// This tracks pqpsi settings and lambda constraint: s>3*lambda and n-s>3*lambda
+	// This tracks pqpsi settings
 	const size_t nBits = Keccak_size_bit;
 	const size_t NBits = KEM_key_size_bit;
-	const size_t sBits = 1400;
-	const size_t lambdaBits = 40;
+	const size_t sBits = 1120;
+	const size_t lambdaBits = 128;
 	const size_t warmupRounds = 20;
 	const size_t benchRounds = 400;
 	const u64 rngSeed = 0x5EED123456789ABCuLL;
 
-	ConstructionPermutation P(
-		nBits,
-		NBits,
-		sBits,
-		Keccak1600Adapter::pi,
-		Keccak1600Adapter::pi_inv,
-		lambdaBits);
+	Pi P(nBits, NBits, sBits, lambdaBits);
 
 	std::mt19937_64 rng(rngSeed);
 	std::vector<Bits> states(benchRounds + warmupRounds, Bits(NBits, 0));
@@ -175,14 +169,14 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	out << "ConstructionPermutation benchmark (s=" << sBits << ")\n";
+	out << "Pi benchmark (s=" << sBits << ")\n";
 	out << "timestamp: " << nowIsoLike() << "\n";
 	out << "host_uname: " << unameLine() << "\n";
 	out << "cpu_model: " << cpuModel() << "\n";
 	out << "hw_threads: " << std::thread::hardware_concurrency() << "\n";
 	out << "compiler: " << __VERSION__ << "\n";
 	out << "keccak_backend: thirdparty/KeccakTools/Sources/Keccak-f.*\n";
-	out << "what_is_measured: frontend/pqpsi/permutation.h ConstructionPermutation encrypt/decrypt final parameters with s=" << sBits << "\n";
+	out << "what_is_measured: frontend/pqpsi/pi.h Pi encrypt decrypt with s=" << sBits << "\n";
 	out << "selected_s_bits: " << sBits << "\n";
 	out << "arch_note: run under x86_64 if on Apple Silicon\n";
 	out << "\n";

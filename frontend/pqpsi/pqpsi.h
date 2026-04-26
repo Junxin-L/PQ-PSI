@@ -3,6 +3,8 @@
 #include "Crypto/PRNG.h"
 #include "Network/Channel.h"
 #include "Network/BtEndpoint.h"
+#include "okvs/rbokvs.h"
+#include <limits>
 #include <Common/ByteStream.h>
 #include <fstream>
 #include <util.h>
@@ -30,14 +32,24 @@ struct PqPsiRunProfile
 	PqPsiStageMs party1;
 };
 
+using RbCfg = osuCrypto::RBParams;
+using RbInfo = osuCrypto::RBResolved;
 
-//void pqpsi(u64 myIdx, u64 setSize, std::vector<block> inputSet);
-
-void PqPsi_Test_Main();
-void PqPsi_RbOkvs_Test_Main();
-bool PqPsi_RbOkvs_Test_Check(u64& gotIntersection, u64& expectedIntersection);
-bool PqPsi_RbOkvs_RunCheck(
+void pqpsi(
+	u64 me,
 	u64 setSize,
-	u64& gotIntersection,
-	u64& expectedIntersection,
-	PqPsiRunProfile* profileOut = nullptr);
+	std::vector<block> set,
+	const RbCfg* rb = nullptr,
+	u64* hitOut = nullptr,
+	PqPsiStageMs* msOut = nullptr);
+
+void psiMain();
+void rbMain();
+bool rbCheck(u64& got, u64& want, const RbCfg* rb = nullptr);
+bool rbRun(
+	u64 setSize,
+	u64& got,
+	u64& want,
+	const RbCfg* rb = nullptr,
+	PqPsiRunProfile* out = nullptr,
+	u64 hitTarget = std::numeric_limits<u64>::max());

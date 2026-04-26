@@ -81,27 +81,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="bitPosition.cpp" />
-    <ClCompile Include="CLP.cpp" />
-    <ClCompile Include="pqpsi.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="miraclTest.cpp" />
-    <ClCompile Include="OtBinMain.cpp" />
-    <ClCompile Include="OtBinMain.v2.cpp" />
+    <ClCompile Include="pqpsi\\check.cpp" />
+    <ClCompile Include="pqpsi\\pqpsi.cpp" />
+    <ClCompile Include="pqpsi\\protocols\\recv.cpp" />
+    <ClCompile Include="pqpsi\\protocols\\send.cpp" />
     <ClCompile Include="util.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="bitPosition.h" />
-    <ClInclude Include="CLP.h" />
     <ClInclude Include="Keccak-f.h" />
-    <ClInclude Include="permutation.h" />
-    <ClInclude Include="okvs.h" />
-    <ClInclude Include="pqpsi.h" />
-    <ClInclude Include="o1party.h" />
-    <ClInclude Include="OtBinMain.h" />
-    <ClInclude Include="OtBinMain.v2.h" />
-    <ClInclude Include="psi3.h" />
-    <ClInclude Include="tpsi.h" />
+    <ClInclude Include="pqpsi\\pi.h" />
+    <ClInclude Include="pqpsi\\pqpsi.h" />
+    <ClInclude Include="pqpsi\\protocols\\party.h" />
+    <ClInclude Include="pqpsi\\protocols\\tools.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>

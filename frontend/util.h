@@ -5,10 +5,15 @@
 #include "Network/Channel.h"
 #include <fstream>
 
-#define SimulatedOkvs 0
-#define PolyOkvs 1
-#define PaxosOkvs 2
-#define RandomBandOkvs 3
+#define simOkvs 0
+#define polyOkvs 1
+#define paxosOkvs 2
+#define rbOkvs 3
+
+#define SimulatedOkvs simOkvs
+#define PolyOkvs polyOkvs
+#define PaxosOkvs paxosOkvs
+#define RandomBandOkvs rbOkvs
 #define	TableOPPRF 0
 
 #define secMalicious 0

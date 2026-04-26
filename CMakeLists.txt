@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8)
+cmake_minimum_required(VERSION 3.10)
 
 project("libPSI")
 
@@ -35,6 +35,8 @@ SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")
 #       Library/includes locations          #
 #############################################
 
+option(PQPSI_BUILD_RBOKVS_BENCH_ONLY "Build only the PQPSI RB-OKVS benchmark and its minimal dependencies." OFF)
+
 # default location for libOTe
 set(libOTe_Dirs "${CMAKE_SOURCE_DIR}/libOTe/")
 include_directories("${libOTe_Dirs}/libOTe/") 
@@ -47,8 +49,10 @@ link_directories("${Miracl_Dirs}/miracl/source/")
 
 # default location for NTL
 set(NTL_Dirs "${CMAKE_SOURCE_DIR}/thirdparty/linux/ntl/")
-include_directories("${NTL_Dirs}/include/")
-link_directories("${NTL_Dirs}/src/")
+if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
+  include_directories("${NTL_Dirs}/include/")
+  link_directories("${NTL_Dirs}/src/")
+endif()
 
 set(libPaXoS_Dirs "${CMAKE_SOURCE_DIR}/libPaXoS/")
 include_directories("${libPaXoS_Dirs}/libPaXoS/")
@@ -67,21 +71,27 @@ include_directories(cryptoTools)
 #############################################
 #               Build libOTe                #
 #############################################
-add_subdirectory(libOTe)
-include_directories(libOTe)
+if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
+  add_subdirectory(libOTe)
+  include_directories(libOTe)
+endif()
 
 
 #############################################
 #               Build libOPRF                 #
 #############################################
-add_subdirectory(libOPRF)
-include_directories(libOPRF)
+if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
+  add_subdirectory(libOPRF)
+  include_directories(libOPRF)
+endif()
 
 #############################################
 #               Build libPaXoS              #
 #############################################
-add_subdirectory(libPaXoS)
-include_directories(libPaXoS)
+if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
+  add_subdirectory(libPaXoS)
+  include_directories(libPaXoS)
+endif()
 
 
 #############################################
@@ -95,5 +105,3 @@ include_directories(libPaXoS)
 #              Build Frontend               #
 #############################################
 add_subdirectory(frontend)
-
-

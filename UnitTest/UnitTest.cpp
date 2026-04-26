@@ -5,7 +5,7 @@
 #include "OT_Tests.h"
 #include "nPSIv2.h"
 //#include "OPPRF_Tests.h"
-#include "frontend/pqpsi/permutation.h"
+#include "frontend/pqpsi/pi.h"
 #include "frontend/pqpsi/pqpsi.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -31,7 +31,7 @@ namespace UnitTest
 			const int rc = permutation_Test();
 			if (rc != 0)
 			{
-				throw UnitTestFail("ConstructionPermutation round-trip failed");
+				throw UnitTestFail("Pi round-trip failed");
 			}
 		}
 
@@ -39,7 +39,7 @@ namespace UnitTest
 		{
 			InitDebugPrinting();
 			u64 got = 0, expected = 0;
-			const bool ok = PqPsi_RbOkvs_Test_Check(got, expected);
+			const bool ok = rbCheck(got, expected);
 			std::wstringstream ss;
 			ss << L"rbokvs+pqpsi mismatch: expected " << expected << L", got " << got;
 			Assert::IsTrue(ok, ss.str().c_str());

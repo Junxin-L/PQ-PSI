@@ -51,8 +51,8 @@ add_dependencies(cryptoTools sha_asm)
  
 find_library(
   MIRACL_LIB 
-  NAMES miracl  
-  HINTS "${Miracl_Dirs}/miracl/source/")
+  NAMES miracl libmiracl
+  HINTS "${Miracl_Dirs}/miracl/source/" "${Miracl_Dirs}/miracl/")
   
 # if we cant fint it, throw an error
 if(NOT MIRACL_LIB)
@@ -61,11 +61,16 @@ if(NOT MIRACL_LIB)
 endif()
 
 
-set(Boost_USE_STATIC_LIBS        ON) # only find static libs
+if(WIN32)
+  set(Boost_USE_STATIC_LIBS        ON)
+  set(Boost_USE_STATIC_RUNTIME     ON)
+else()
+  set(Boost_USE_STATIC_LIBS        OFF)
+  set(Boost_USE_STATIC_RUNTIME     OFF)
+endif()
 set(Boost_USE_MULTITHREADED      ON)
-set(Boost_USE_STATIC_RUNTIME     ON)
 
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system thread)
 
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS}) 

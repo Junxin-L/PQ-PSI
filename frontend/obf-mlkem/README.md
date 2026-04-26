@@ -10,9 +10,6 @@ Right now the useful pieces are:
 - `codec/`
   `Kemeleon` is the encoding layer. It implements the Figure 3 of https://eprint.iacr.org/2024/1086.pdf public-key and ciphertext encoding and decoding logic from the paper.
 
-- `session/`
-  `ObfSession` is a small handshake helper built on top of `MlKem` and `Kemeleon`. It is here for experiments, but it is not something we need for `PQPSI`.
-
 - `native/`
   This is the local `mlkem-native` integration used by the backend.
 
@@ -73,8 +70,6 @@ They cover:
 - ML-KEM round trips
 - Kemeleon round trips
 - malformed input rejection
-- session key agreement across both sides
-- some basic session failure cases
 
 I built and ran this on an Apple Silicon Mac through the x86_64 path, so the working commands look like this:
 

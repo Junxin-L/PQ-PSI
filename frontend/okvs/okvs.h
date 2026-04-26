@@ -108,7 +108,7 @@ inline void GbfEncode(const std::vector<std::pair<block, std::vector<block>>> ke
 
     /*std::cout << IoStream::lock;
     for (u64 i = 0; i < 5; i++)
-        std::cout << coefficients[i] << " - SimulatedOkvsEncode - " << i << std::endl;
+        std::cout << coefficients[i] << " - simEnc - " << i << std::endl;
     std::cout << IoStream::unlock;*/
 }
 
@@ -198,7 +198,7 @@ inline  void GbfDecode(const std::vector<std::vector<block>> garbledBF, const st
 
 
 
-inline  void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::vector<std::vector<block>> setValues, std::vector<std::vector<block>>& okvsTable)
+inline  void simEnc(const std::vector<block> setKeys, const std::vector<std::vector<block>> setValues, std::vector<std::vector<block>>& okvsTable)
 {
     GbfEncode(setKeys, setValues, okvsTable); //using gbf with two hash function 
 
@@ -213,7 +213,7 @@ inline  void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::ve
         this_thread::sleep_for(chrono::milliseconds(2838 * (setKeys.size() / (1 << 20))));
 }
 
-inline  void SimulatedOkvsDecode(const std::vector<std::vector<block>> okvsTable, const std::vector<block> setKeys, std::vector<std::vector<block>>& setValues)
+inline  void simDec(const std::vector<std::vector<block>> okvsTable, const std::vector<block> setKeys, std::vector<std::vector<block>>& setValues)
 {
 
     GbfDecode(okvsTable, setKeys, setValues);
@@ -306,7 +306,7 @@ inline void GbfEncode(const std::vector<std::pair<block, block>> key_values, std
 
     /*std::cout << IoStream::lock;
     for (u64 i = 0; i < 5; i++)
-        std::cout << coefficients[i] << " - SimulatedOkvsEncode - " << i << std::endl;
+        std::cout << coefficients[i] << " - simEnc - " << i << std::endl;
     std::cout << IoStream::unlock;*/
 }
 
@@ -425,7 +425,7 @@ inline void GbfTest()
 
 
 
-inline  void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::vector<block> setValues, std::vector<block>& garbledBF)
+inline  void simEnc(const std::vector<block> setKeys, const std::vector<block> setValues, std::vector<block>& garbledBF)
 {
     GbfEncode(setKeys, setValues, garbledBF); //using gbf with two hash function 
 
@@ -440,7 +440,7 @@ inline  void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::ve
         this_thread::sleep_for(chrono::milliseconds(2838 * (setKeys.size() / (1 << 20))));
 }
 
-inline  void SimulatedOkvsDecode(const std::vector<block> garbledBF, const std::vector<block> setKeys, std::vector<block>& setValues)
+inline  void simDec(const std::vector<block> garbledBF, const std::vector<block> setKeys, std::vector<block>& setValues)
 {
 
     GbfDecode(garbledBF, setKeys, setValues);
@@ -454,6 +454,26 @@ inline  void SimulatedOkvsDecode(const std::vector<block> garbledBF, const std::
         this_thread::sleep_for(chrono::milliseconds(990));
     else
         this_thread::sleep_for(chrono::milliseconds(990 * (setKeys.size() / (1 << 20))));
+}
+
+inline void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::vector<std::vector<block>> setValues, std::vector<std::vector<block>>& okvsTable)
+{
+    simEnc(setKeys, setValues, okvsTable);
+}
+
+inline void SimulatedOkvsDecode(const std::vector<std::vector<block>> okvsTable, const std::vector<block> setKeys, std::vector<std::vector<block>>& setValues)
+{
+    simDec(okvsTable, setKeys, setValues);
+}
+
+inline void SimulatedOkvsEncode(const std::vector<block> setKeys, const std::vector<block> setValues, std::vector<block>& garbledBF)
+{
+    simEnc(setKeys, setValues, garbledBF);
+}
+
+inline void SimulatedOkvsDecode(const std::vector<block> garbledBF, const std::vector<block> setKeys, std::vector<block>& setValues)
+{
+    simDec(garbledBF, setKeys, setValues);
 }
 
 inline void PaxosEncode(const std::vector<block> setKeys, const std::vector<block> setValues, std::vector<block>& okvs, uint64_t fieldSize)
@@ -609,7 +629,7 @@ inline void PolyTest()
     }
 
     std::vector<block> coefficients;
-    //SimulatedOkvsEncode(key_values, coefficients);
+    //simEnc(key_values, coefficients);
     PolyEncode(setKeys, setValues, coefficients);
 
     /*for (size_t i = 0; i < 10; i++)
