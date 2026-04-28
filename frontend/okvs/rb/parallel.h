@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <exception>
 #include <functional>
 #include <thread>
@@ -8,8 +9,28 @@
 
 namespace osuCrypto
 {
+    inline size_t RBHwThreads()
+    {
+        return std::max<size_t>(1, std::thread::hardware_concurrency());
+    }
+
+    inline size_t RBWorkerThreads(bool multiThread, size_t requested = 0)
+    {
+        if (!multiThread)
+        {
+            return 1;
+        }
+
+        const size_t hw = RBHwThreads();
+        if (requested == 0)
+        {
+            return hw;
+        }
+        return std::max<size_t>(1, std::min(requested, hw));
+    }
+
     template<typename Fn>
-    inline void RBFor(size_t n, bool multiThread, Fn fn)
+    inline void RBFor(size_t n, bool multiThread, size_t workerThreads, Fn fn)
     {
         if (n == 0)
         {
@@ -22,8 +43,7 @@ namespace osuCrypto
             return;
         }
 
-        const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
-        const size_t thrN = std::min<size_t>(hw, n);
+        const size_t thrN = std::min(RBWorkerThreads(multiThread, workerThreads), n);
         if (thrN <= 1 || n < 64)
         {
             fn(0, n);

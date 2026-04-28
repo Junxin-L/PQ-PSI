@@ -148,6 +148,76 @@ namespace osuCrypto
         return true;
     }
 
+    inline bool RBEncode(
+        const std::vector<block>& setKeys,
+        const std::vector<block>& setValues,
+        size_t rowSize,
+        std::vector<block>& okvsTable,
+        RBParams params = {})
+    {
+        if (setKeys.empty())
+        {
+            okvsTable.clear();
+            return true;
+        }
+        if (rowSize == 0 || setValues.size() != setKeys.size() * rowSize)
+            throw std::invalid_argument("RBEncode flat values mismatch");
+
+        const auto cfg = RBInfoOf(setKeys.size(), params);
+        const size_t columns = cfg.columns;
+        const size_t bandWidth = cfg.bandWidth;
+
+        std::vector<RBFlatRow> rows;
+        std::vector<block> rhs;
+        RBRowsFlat(setKeys, setValues, rowSize, columns, bandWidth, params, rows, rhs);
+
+        const size_t rowCnt = rows.size();
+        std::vector<size_t> pivot(rowCnt, columns);
+
+        for (size_t i = 0; i < rowCnt; ++i)
+        {
+            const size_t lead = RBLead(rows[i].bits, bandWidth);
+            if (lead == bandWidth)
+                return false;
+
+            pivot[i] = rows[i].start + lead;
+
+            for (size_t j = i + 1; j < rowCnt; ++j)
+            {
+                if (rows[j].start > pivot[i])
+                    break;
+
+                const size_t off = pivot[i] - rows[j].start;
+                if (off >= bandWidth || !RBBit(rows[j].bits, off))
+                    continue;
+
+                RBXorShifted(rows[j].bits, off, rows[i].bits, lead, bandWidth);
+                RBXor(RBFlatPtr(rhs, rowSize, rows[j]), RBFlatPtr(rhs, rowSize, rows[i]), rowSize);
+            }
+        }
+
+        okvsTable.assign(columns * rowSize, ZeroBlock);
+        std::vector<block> sum(rowSize);
+        for (ptrdiff_t i = static_cast<ptrdiff_t>(rowCnt) - 1; i >= 0; --i)
+        {
+            const auto& row = rows[static_cast<size_t>(i)];
+            std::memcpy(sum.data(), RBFlatPtr(rhs, rowSize, row), rowSize * sizeof(block));
+            const size_t s = row.start;
+            const size_t p = pivot[static_cast<size_t>(i)];
+            for (size_t j = 0; j < bandWidth; ++j)
+            {
+                if (!RBBit(row.bits, j))
+                    continue;
+                const size_t col = s + j;
+                if (col == p)
+                    continue;
+                RBXor(sum, RBRowPtr(okvsTable, rowSize, col), rowSize);
+            }
+            std::memcpy(RBRowPtr(okvsTable, rowSize, p), sum.data(), rowSize * sizeof(block));
+        }
+        return true;
+    }
+
     inline void RBDecode(
         const std::vector<std::vector<block>>& okvsTable,
         const std::vector<block>& setKeys,
@@ -171,8 +241,12 @@ namespace osuCrypto
         if (bandWidth > columns)
             throw std::invalid_argument("RBDecode width > columns");
 
-        setValues.assign(setKeys.size(), std::vector<block>(valWidth, ZeroBlock));
-        RBFor(setKeys.size(), params.multiThread, [&](size_t begin, size_t end)
+        setValues.resize(setKeys.size());
+        for (auto& row : setValues)
+        {
+            row.assign(valWidth, ZeroBlock);
+        }
+        RBFor(setKeys.size(), params.multiThread, params.workerThreads, [&](size_t begin, size_t end)
         {
             const auto hash = RBMakeHashCtx(params);
             for (size_t i = begin; i < end; ++i)
@@ -224,8 +298,12 @@ namespace osuCrypto
         if (bandWidth > columns)
             throw std::invalid_argument("RBDecode width > columns");
 
-        setValues.assign(setKeys.size(), std::vector<block>(rowSize, ZeroBlock));
-        RBFor(setKeys.size(), params.multiThread, [&](size_t begin, size_t end)
+        setValues.resize(setKeys.size());
+        for (auto& row : setValues)
+        {
+            row.assign(rowSize, ZeroBlock);
+        }
+        RBFor(setKeys.size(), params.multiThread, params.workerThreads, [&](size_t begin, size_t end)
         {
             const auto hash = RBMakeHashCtx(params);
             for (size_t i = begin; i < end; ++i)
@@ -246,6 +324,59 @@ namespace osuCrypto
                     if (col >= columns)
                         break;
                     RBXor(setValues[i], RBRowPtr(okvsTable, rowSize, col), rowSize);
+                }
+            }
+        });
+    }
+
+    inline void RBDecode(
+        const std::vector<block>& okvsTable,
+        size_t rowSize,
+        const std::vector<block>& setKeys,
+        std::vector<block>& setValues,
+        RBParams params = {})
+    {
+        if (okvsTable.empty())
+        {
+            setValues.clear();
+            return;
+        }
+        if (rowSize == 0 || (okvsTable.size() % rowSize) != 0)
+            throw std::invalid_argument("RBDecode flat table size mismatch");
+
+        const size_t columns = okvsTable.size() / rowSize;
+        if (params.columns != 0 && params.columns != columns)
+            throw std::invalid_argument("RBDecode columns mismatch");
+
+        const size_t bandWidth = RBTableW(setKeys.size(), columns, params);
+        if (bandWidth > 256)
+            throw std::invalid_argument("RBDecode width > 256");
+        if (bandWidth > columns)
+            throw std::invalid_argument("RBDecode width > columns");
+
+        setValues.assign(setKeys.size() * rowSize, ZeroBlock);
+        RBFor(setKeys.size(), params.multiThread, params.workerThreads, [&](size_t begin, size_t end)
+        {
+            const auto hash = RBMakeHashCtx(params);
+            for (size_t i = begin; i < end; ++i)
+            {
+                const u64 h = RBHash64(setKeys[i], hash.start);
+                const size_t range = columns - bandWidth + 1;
+                const size_t start = (range == 0) ? 0 : static_cast<size_t>(h % range);
+                block* out = setValues.data() + i * rowSize;
+
+                RBBits bits{};
+                RBMaskBits(RBMask256(setKeys[i], hash), bandWidth, bits);
+                RBEnsureBits(bits);
+
+                for (size_t j = 0; j < bandWidth; ++j)
+                {
+                    if (!RBBit(bits, j))
+                        continue;
+                    const size_t col = start + j;
+                    if (col >= columns)
+                        break;
+                    RBXor(out, RBRowPtr(okvsTable, rowSize, col), rowSize);
                 }
             }
         });

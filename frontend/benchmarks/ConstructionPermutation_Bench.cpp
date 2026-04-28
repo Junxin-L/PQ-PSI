@@ -1,4 +1,4 @@
-#include "pqpsi/pi.h"
+#include "permutation/cons.h"
 
 #include <algorithm>
 #include <chrono>
@@ -103,33 +103,32 @@ namespace
 int main(int argc, char** argv)
 {
 	const std::string outPath = (argc > 1) ? argv[1] : "build-x86/construction_permutation_benchmark.txt";
+	const auto kind = (argc > 2) ? pi::parseKind(argv[2]) : pi::Kind::Keccak1600;
 
 	// This tracks pqpsi settings
-	const size_t nBits = Keccak_size_bit;
-	const size_t NBits = KEM_key_size_bit;
-	const size_t sBits = 1120;
-	const size_t lambdaBits = 128;
+	const auto params = pi::defaults(kind);
 	const size_t warmupRounds = 20;
 	const size_t benchRounds = 400;
 	const u64 rngSeed = 0x5EED123456789ABCuLL;
 
-	Pi P(nBits, NBits, sBits, lambdaBits);
+	Pi P(params);
 
 	std::mt19937_64 rng(rngSeed);
-	std::vector<Bits> states(benchRounds + warmupRounds, Bits(NBits, 0));
+	const size_t stateBytes = params.N / 8;
+	std::vector<std::vector<u8>> states(benchRounds + warmupRounds, std::vector<u8>(stateBytes, 0));
 	for (auto& st : states)
 	{
 		for (auto& b : st)
 		{
-			b = static_cast<u8>(rng() & 1ULL);
+			b = static_cast<u8>(rng() & 0xFFU);
 		}
 	}
 
 	for (size_t i = 0; i < warmupRounds; ++i)
 	{
-		auto y = P.encrypt(states[i]);
-		auto z = P.decrypt(y);
-		(void)z;
+		auto y = states[i];
+		P.encryptBytes(y.data(), y.size());
+		P.decryptBytes(y.data(), y.size());
 	}
 
 	std::vector<double> encNs;
@@ -141,16 +140,17 @@ int main(int argc, char** argv)
 	for (size_t i = 0; i < benchRounds; ++i)
 	{
 		const auto& x = states[warmupRounds + i];
+		auto y = x;
 
 		const auto t0 = std::chrono::steady_clock::now();
-		auto y = P.encrypt(x);
+		P.encryptBytes(y.data(), y.size());
 		const auto t1 = std::chrono::steady_clock::now();
-		auto z = P.decrypt(y);
+		P.decryptBytes(y.data(), y.size());
 		const auto t2 = std::chrono::steady_clock::now();
 
 		encNs.push_back(std::chrono::duration<double, std::nano>(t1 - t0).count());
 		decNs.push_back(std::chrono::duration<double, std::nano>(t2 - t1).count());
-		if (z != x)
+		if (y != x)
 		{
 			++roundtripFail;
 		}
@@ -158,7 +158,7 @@ int main(int argc, char** argv)
 
 	const auto enc = summarize(encNs);
 	const auto dec = summarize(decNs);
-	const double bytesPerOp = static_cast<double>(NBits) / 8.0;
+	const double bytesPerOp = static_cast<double>(params.N) / 8.0;
 	const double encMBps = (bytesPerOp / (enc.mean / 1e9)) / (1024.0 * 1024.0);
 	const double decMBps = (bytesPerOp / (dec.mean / 1e9)) / (1024.0 * 1024.0);
 
@@ -169,29 +169,30 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	out << "Pi benchmark (s=" << sBits << ")\n";
+	out << "Pi benchmark (" << P.permName() << ", s=" << params.s << ")\n";
 	out << "timestamp: " << nowIsoLike() << "\n";
 	out << "host_uname: " << unameLine() << "\n";
 	out << "cpu_model: " << cpuModel() << "\n";
 	out << "hw_threads: " << std::thread::hardware_concurrency() << "\n";
 	out << "compiler: " << __VERSION__ << "\n";
-	out << "keccak_backend: thirdparty/KeccakTools/Sources/Keccak-f.*\n";
-	out << "what_is_measured: frontend/pqpsi/pi.h Pi encrypt decrypt with s=" << sBits << "\n";
-	out << "selected_s_bits: " << sBits << "\n";
+	out << "small_permutation: " << P.permName() << "\n";
+	out << "permutation_backend: thirdparty/KeccakTools for keccak, thirdparty/sneik for SNEIK-f512\n";
+	out << "what_is_measured: frontend/permutation ConsPi construction encrypt decrypt\n";
+	out << "selected_s_bits: " << params.s << "\n";
 	out << "arch_note: run under x86_64 if on Apple Silicon\n";
 	out << "\n";
 
 	out << "parameters\n";
-	out << "n_bits: " << nBits << "\n";
-	out << "N_bits: " << NBits << "\n";
-	out << "s_bits: " << sBits << "\n";
-	out << "lambda_bits: " << lambdaBits << "\n";
-	out << "constraint_check: s>3*lambda and n-s>3*lambda\n";
+	out << "n_bits: " << params.n << "\n";
+	out << "N_bits: " << params.N << "\n";
+	out << "s_bits: " << params.s << "\n";
+	out << "lambda_bits: " << params.lambda << "\n";
+	out << "constraint_check: s>=2*lambda and n-s>=2*lambda\n";
 	out << "rounds_in_construction: " << P.rounds() << "\n";
 	out << "warmup_rounds: " << warmupRounds << "\n";
 	out << "benchmark_rounds: " << benchRounds << "\n";
 	out << "rng_seed: 0x" << std::hex << rngSeed << std::dec << "\n";
-	out << "state_bits_per_op: " << NBits << "\n";
+	out << "state_bits_per_op: " << params.N << "\n";
 	out << "state_bytes_per_op: " << static_cast<u64>(bytesPerOp) << "\n";
 	out << "\n";
 

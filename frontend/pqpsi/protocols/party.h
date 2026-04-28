@@ -2,7 +2,6 @@
 
 #include "../pqpsi.h"
 #include "tools.h"
-#include "../pi.h"
 #include "Network/Channel.h"
 #include <functional>
 #include <vector>
@@ -17,8 +16,10 @@ namespace pqpsi_proto
 		u64 bandWidth = 0;
 		u64 rowSize = 0;
 		bool multiThread = true;
+		size_t workerThreads = 4;
 		RbCfg rb{};
-		Pi& pi;
+		pqperm::Perm& ownPi;
+		pqperm::Perm& peerPi;
 		std::vector<block>& set;
 		std::vector<std::vector<Channel*>>& chls;
 		std::function<void(u64)> simSend;

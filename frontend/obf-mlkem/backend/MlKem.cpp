@@ -78,29 +78,42 @@ namespace osuCrypto
 		KeyPair keyPair;
 		keyPair.publicKey.resize(publicKeyBytes());
 		keyPair.secretKey.resize(secretKeyBytes());
+		keyGen(seed, keyPair.publicKey, keyPair.secretKey);
+		return keyPair;
+	}
+
+	void MlKem::keyGen(span<const u8> seed, span<u8> publicKey, span<u8> secretKey) const
+	{
+		checkSeedSize(seed, KeyGenSeedSize, "MlKem::keyGen seed");
+		if (publicKey.size() != publicKeyBytes())
+		{
+			throw std::invalid_argument("MlKem public key output has unexpected size");
+		}
+		if (secretKey.size() != secretKeyBytes())
+		{
+			throw std::invalid_argument("MlKem secret key output has unexpected size");
+		}
 
 		switch (mMode)
 		{
 		case Mode::MlKem512:
 			requireSuccess(
-				mlkem512_keypair_derand(keyPair.publicKey.data(), keyPair.secretKey.data(), seed.data()),
+				mlkem512_keypair_derand(publicKey.data(), secretKey.data(), seed.data()),
 				"MlKem512 keypair_derand");
 			break;
 		case Mode::MlKem768:
 			requireSuccess(
-				mlkem768_keypair_derand(keyPair.publicKey.data(), keyPair.secretKey.data(), seed.data()),
+				mlkem768_keypair_derand(publicKey.data(), secretKey.data(), seed.data()),
 				"MlKem768 keypair_derand");
 			break;
 		case Mode::MlKem1024:
 			requireSuccess(
-				mlkem1024_keypair_derand(keyPair.publicKey.data(), keyPair.secretKey.data(), seed.data()),
+				mlkem1024_keypair_derand(publicKey.data(), secretKey.data(), seed.data()),
 				"MlKem1024 keypair_derand");
 			break;
 		default:
 			throw std::invalid_argument("Unsupported ML-KEM mode");
 		}
-
-		return keyPair;
 	}
 
 	MlKem::EncapResult MlKem::encaps(span<const u8> publicKey) const
@@ -112,34 +125,49 @@ namespace osuCrypto
 
 	MlKem::EncapResult MlKem::encaps(span<const u8> publicKey, span<const u8> seed) const
 	{
-		requireSize(publicKey, publicKeyBytes(), "MlKem public key");
-		checkSeedSize(seed, EncapSeedSize, "MlKem::encaps seed");
-
 		EncapResult result;
 		result.cipherText.resize(cipherTextBytes());
+		encaps(publicKey, seed, result.cipherText, result.sharedSecret);
+		return result;
+	}
+
+	void MlKem::encaps(
+		span<const u8> publicKey,
+		span<const u8> seed,
+		span<u8> cipherText,
+		span<u8> sharedSecret) const
+	{
+		requireSize(publicKey, publicKeyBytes(), "MlKem public key");
+		checkSeedSize(seed, EncapSeedSize, "MlKem::encaps seed");
+		if (cipherText.size() != cipherTextBytes())
+		{
+			throw std::invalid_argument("MlKem ciphertext output has unexpected size");
+		}
+		if (sharedSecret.size() != SharedSecretSize)
+		{
+			throw std::invalid_argument("MlKem shared secret output has unexpected size");
+		}
 
 		switch (mMode)
 		{
 		case Mode::MlKem512:
 			requireSuccess(
-				mlkem512_enc_derand(result.cipherText.data(), result.sharedSecret.data(), publicKey.data(), seed.data()),
+				mlkem512_enc_derand(cipherText.data(), sharedSecret.data(), publicKey.data(), seed.data()),
 				"MlKem512 enc_derand");
 			break;
 		case Mode::MlKem768:
 			requireSuccess(
-				mlkem768_enc_derand(result.cipherText.data(), result.sharedSecret.data(), publicKey.data(), seed.data()),
+				mlkem768_enc_derand(cipherText.data(), sharedSecret.data(), publicKey.data(), seed.data()),
 				"MlKem768 enc_derand");
 			break;
 		case Mode::MlKem1024:
 			requireSuccess(
-				mlkem1024_enc_derand(result.cipherText.data(), result.sharedSecret.data(), publicKey.data(), seed.data()),
+				mlkem1024_enc_derand(cipherText.data(), sharedSecret.data(), publicKey.data(), seed.data()),
 				"MlKem1024 enc_derand");
 			break;
 		default:
 			throw std::invalid_argument("Unsupported ML-KEM mode");
 		}
-
-		return result;
 	}
 
 	std::array<u8, MlKem::SharedSecretSize> MlKem::decaps(span<const u8> cipherText, span<const u8> secretKey) const

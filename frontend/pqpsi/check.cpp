@@ -96,7 +96,14 @@ bool rbCheck(u64& got, u64& want, const RbCfg* rb)
 	return rbRun(1 << 2, got, want, rb);
 }
 
-bool rbRun(u64 n, u64& got, u64& want, const RbCfg* rb, PqPsiRunProfile* out, u64 hitTarget)
+bool rbRun(
+	u64 n,
+	u64& got,
+	u64& want,
+	const RbCfg* rb,
+	PqPsiRunProfile* out,
+	u64 hitTarget,
+	const PiCfg* pi)
 {
 	if (n == 0)
 	{
@@ -132,12 +139,12 @@ bool rbRun(u64 n, u64& got, u64& want, const RbCfg* rb, PqPsiRunProfile* out, u6
 			if (i == 0)
 			{
 				u64 localHits = 0;
-				pqpsi(i, n, set0, rb, &localHits, &ms0);
+				pqpsi(i, n, set0, rb, &localHits, &ms0, pi);
 				hits.store(localHits, std::memory_order_relaxed);
 			}
 			else
 			{
-				pqpsi(i, n, set1, rb, nullptr, &ms1);
+				pqpsi(i, n, set1, rb, nullptr, &ms1, pi);
 			}
 		});
 	}

@@ -62,12 +62,17 @@ namespace
 		u64 portSeed = 23000;
 		NetMeta net;
 		RbCfg rb{};
+		PiCfg pi{};
 	};
 
 	struct PartySeries
 	{
 		std::vector<double> totalMs;
+		std::vector<double> setupMs;
+		std::vector<double> teardownMs;
+		std::vector<double> prepMs;
 		std::vector<double> keyMs;
+		std::vector<double> maskMs;
 		std::vector<double> piMs;
 		std::vector<double> okEncMs;
 		std::vector<double> okDecMs;
@@ -81,7 +86,11 @@ namespace
 		void reserve(size_t n)
 		{
 			totalMs.reserve(n);
+			setupMs.reserve(n);
+			teardownMs.reserve(n);
+			prepMs.reserve(n);
 			keyMs.reserve(n);
+			maskMs.reserve(n);
 			piMs.reserve(n);
 			okEncMs.reserve(n);
 			okDecMs.reserve(n);
@@ -96,7 +105,11 @@ namespace
 		void add(const PqPsiStageMs& ms)
 		{
 			totalMs.push_back(ms.totalMs);
+			setupMs.push_back(ms.setupMs);
+			teardownMs.push_back(ms.teardownMs);
+			prepMs.push_back(ms.prepMs);
 			keyMs.push_back(ms.kemKeyGenMs);
+			maskMs.push_back(ms.maskMs);
 			piMs.push_back(ms.permuteMs);
 			okEncMs.push_back(ms.okvsEncodeMs);
 			okDecMs.push_back(ms.okvsDecodeMs);
@@ -215,6 +228,20 @@ namespace
 		s.min = v.front();
 		s.max = v.back();
 		return s;
+	}
+
+	std::vector<double> protocolTimes(const PartySeries& p)
+	{
+		std::vector<double> out;
+		out.reserve(p.totalMs.size());
+		for (size_t i = 0; i < p.totalMs.size(); ++i)
+		{
+			const double setup = i < p.setupMs.size() ? p.setupMs[i] : 0.0;
+			const double teardown = i < p.teardownMs.size() ? p.teardownMs[i] : 0.0;
+			const double v = p.totalMs[i] - setup - teardown;
+			out.push_back(v > 0.0 ? v : 0.0);
+		}
+		return out;
 	}
 
 	u64 parseU64(const char* s, u64 fallback)
@@ -427,6 +454,7 @@ namespace
 			<< "_eps-" << safeNum(rb.eps)
 			<< "_lam-" << rb.lambda
 			<< "_thr-" << (args.rb.multiThread ? "multi" : "single")
+			<< "_workers-" << rb.workerThreads
 			<< ".md";
 		return name.str();
 	}
@@ -495,6 +523,10 @@ namespace
 			<< "  " << prog << " my-run.md 512 1 5 43000 2.0 10.0 frontend/benchmarks/network_settings.example.conf\n"
 			<< "  " << prog << " 512 1 5 43000 --rb-eps 0.25\n"
 			<< "  " << prog << " 512 1 5 43000 --rb-cols 640 --rb-w 64 --rb-lambda 40\n"
+			<< "  " << prog << " 512 1 5 43000 --pi keccak800\n"
+			<< "  " << prog << " 512 1 5 43000 --pi sneik-f512\n"
+			<< "  " << prog << " 512 1 5 43000 --pi hctr\n"
+			<< "  " << prog << " 512 1 5 43000 --threads 4\n"
 			<< "  " << prog << " 512 1 5 43000 --single-thread\n";
 	}
 
@@ -512,6 +544,12 @@ namespace
 		args.rb.eps = parseDouble(std::getenv("PQPSI_RB_EPS"), args.rb.eps);
 		args.rb.columns = parseU64(std::getenv("PQPSI_RB_COLS"), args.rb.columns);
 		args.rb.bandWidth = parseU64(std::getenv("PQPSI_RB_W"), args.rb.bandWidth);
+		args.rb.workerThreads = parseU64(std::getenv("PQPSI_THREADS"), args.rb.workerThreads);
+		if (const char* piEnv = std::getenv("PQPSI_PI"))
+		{
+			setPi(args.pi, piEnv);
+		}
+		args.pi.lambda = parseU64(std::getenv("PQPSI_PI_LAMBDA"), args.pi.lambda);
 
 		if (argc > i && !isNum(argv[i]))
 		{
@@ -581,9 +619,23 @@ namespace
 			{
 				args.rb.bandWidth = parseU64(argv[++i], args.rb.bandWidth);
 			}
+			else if (argEq(argv[i], "--pi") && i + 1 < argc)
+			{
+				setPi(args.pi, argv[++i]);
+			}
+			else if (argEq(argv[i], "--pi-lambda") && i + 1 < argc)
+			{
+				args.pi.lambda = parseU64(argv[++i], args.pi.lambda);
+			}
+			else if ((argEq(argv[i], "--threads") || argEq(argv[i], "--worker-threads")) && i + 1 < argc)
+			{
+				args.rb.workerThreads = parseU64(argv[++i], args.rb.workerThreads);
+				args.rb.multiThread = args.rb.workerThreads != 1;
+			}
 			else if (argEq(argv[i], "--single-thread"))
 			{
 				args.rb.multiThread = false;
+				args.rb.workerThreads = 1;
 			}
 			else if (argEq(argv[i], "--multi-thread"))
 			{
@@ -613,11 +665,19 @@ namespace
 	RunRes runOne(const Args& args, u64 benchIdx)
 	{
 		const u64 maxRetry = 32;
+		const u64 minPort = 20000;
+		const u64 maxPort = 65000;
+		const u64 portSpan = maxPort - minPort;
+		const u64 portStride = 64;
+		const u64 retryStride = 1;
 		RunRes res{};
+		const u64 seed = (args.portSeed >= minPort && args.portSeed < maxPort)
+			? args.portSeed
+			: minPort + (args.portSeed % portSpan);
 
 		for (u64 tryIdx = 0; tryIdx <= maxRetry; ++tryIdx)
 		{
-			const u64 portBase = args.portSeed + benchIdx * 17 + tryIdx * 101;
+			const u64 portBase = minPort + ((seed - minPort + benchIdx * portStride + tryIdx * retryStride) % portSpan);
 			const u64 endpointPort = portBase + 1;
 			if (!canBindLoopbackPort(static_cast<u32>(endpointPort)))
 			{
@@ -634,7 +694,7 @@ namespace
 			try
 			{
 				const auto t0 = std::chrono::steady_clock::now();
-				res.ok = rbRun(args.setSize, res.got, res.want, &args.rb, &res.prof);
+				res.ok = rbRun(args.setSize, res.got, res.want, &args.rb, &res.prof, std::numeric_limits<u64>::max(), &args.pi);
 				const auto t1 = std::chrono::steady_clock::now();
 				res.runUs = std::chrono::duration<double, std::micro>(t1 - t0).count();
 				return res;
@@ -659,8 +719,10 @@ namespace
 	void writeParty(
 		std::ofstream& out,
 		const char* name,
-		const Stats& total,
+		const Stats& protocol,
+		const Stats& prep,
 		const Stats& key,
+		const Stats& mask,
 		const Stats& pi,
 		const Stats& okEnc,
 		const Stats& okDec,
@@ -669,17 +731,32 @@ namespace
 		const Stats& kem,
 		const Stats& inv)
 	{
-		out << "### " << name << " (mean total " << total.mean << " ms)\n";
-		out << "| stage | mean_ms | pct_total |\n";
+		const double known = prep.mean
+			+ key.mean
+			+ mask.mean
+			+ pi.mean
+			+ inv.mean
+			+ kem.mean
+			+ okEnc.mean
+			+ okDec.mean
+			+ send.mean
+			+ recv.mean;
+		const double other = protocol.mean > known ? protocol.mean - known : 0.0;
+
+		out << "### " << name << " (mean protocol " << protocol.mean << " ms)\n";
+		out << "| stage | mean_ms | pct_protocol |\n";
 		out << "|---|---:|---:|\n";
-		out << "| keygen | " << key.mean << " | " << pct(key.mean, total.mean) << "% |\n";
-		out << "| permute | " << pi.mean << " | " << pct(pi.mean, total.mean) << "% |\n";
-		out << "| permute_inverse | " << inv.mean << " | " << pct(inv.mean, total.mean) << "% |\n";
-		out << "| kem_ops | " << kem.mean << " | " << pct(kem.mean, total.mean) << "% |\n";
-		out << "| okvs_encode | " << okEnc.mean << " | " << pct(okEnc.mean, total.mean) << "% |\n";
-		out << "| okvs_decode | " << okDec.mean << " | " << pct(okDec.mean, total.mean) << "% |\n";
-		out << "| network_send | " << send.mean << " | " << pct(send.mean, total.mean) << "% |\n";
-		out << "| network_recv | " << recv.mean << " | " << pct(recv.mean, total.mean) << "% |\n";
+		out << "| prep_alloc | " << prep.mean << " | " << pct(prep.mean, protocol.mean) << "% |\n";
+		out << "| keygen | " << key.mean << " | " << pct(key.mean, protocol.mean) << "% |\n";
+		out << "| mask_precompute | " << mask.mean << " | " << pct(mask.mean, protocol.mean) << "% |\n";
+		out << "| permute | " << pi.mean << " | " << pct(pi.mean, protocol.mean) << "% |\n";
+		out << "| permute_inverse | " << inv.mean << " | " << pct(inv.mean, protocol.mean) << "% |\n";
+		out << "| kem_ops | " << kem.mean << " | " << pct(kem.mean, protocol.mean) << "% |\n";
+		out << "| okvs_encode | " << okEnc.mean << " | " << pct(okEnc.mean, protocol.mean) << "% |\n";
+		out << "| okvs_decode | " << okDec.mean << " | " << pct(okDec.mean, protocol.mean) << "% |\n";
+		out << "| network_send | " << send.mean << " | " << pct(send.mean, protocol.mean) << "% |\n";
+		out << "| network_recv | " << recv.mean << " | " << pct(recv.mean, protocol.mean) << "% |\n";
+		out << "| other | " << other << " | " << pct(other, protocol.mean) << "% |\n";
 		out << "\n";
 	}
 
@@ -693,9 +770,20 @@ namespace
 			throw std::runtime_error("failed to open output file: " + args.out);
 		}
 
-		const auto run = summarize(series.runUs);
-		const auto p0Total = summarize(series.p0.totalMs);
+		const auto p0ProtocolTimes = protocolTimes(series.p0);
+		const auto p1ProtocolTimes = protocolTimes(series.p1);
+		std::vector<double> protocolRoundMs;
+		protocolRoundMs.reserve(series.runUs.size());
+		for (size_t i = 0; i < series.runUs.size(); ++i)
+		{
+			protocolRoundMs.push_back(std::max(p0ProtocolTimes[i], p1ProtocolTimes[i]));
+		}
+
+		const auto protocol = summarize(protocolRoundMs);
+		const auto p0Protocol = summarize(p0ProtocolTimes);
+		const auto p0Prep = summarize(series.p0.prepMs);
 		const auto p0Key = summarize(series.p0.keyMs);
+		const auto p0Mask = summarize(series.p0.maskMs);
 		const auto p0Pi = summarize(series.p0.piMs);
 		const auto p0OkEnc = summarize(series.p0.okEncMs);
 		const auto p0OkDec = summarize(series.p0.okDecMs);
@@ -705,8 +793,10 @@ namespace
 		const auto p0Inv = summarize(series.p0.invMs);
 		const auto p0Tx = summarize(series.p0.txBytes);
 		const auto p0Rx = summarize(series.p0.rxBytes);
-		const auto p1Total = summarize(series.p1.totalMs);
+		const auto p1Protocol = summarize(p1ProtocolTimes);
+		const auto p1Prep = summarize(series.p1.prepMs);
 		const auto p1Key = summarize(series.p1.keyMs);
+		const auto p1Mask = summarize(series.p1.maskMs);
 		const auto p1Pi = summarize(series.p1.piMs);
 		const auto p1OkEnc = summarize(series.p1.okEncMs);
 		const auto p1OkDec = summarize(series.p1.okDecMs);
@@ -716,15 +806,10 @@ namespace
 		const auto p1Inv = summarize(series.p1.invMs);
 		const auto p1Tx = summarize(series.p1.txBytes);
 		const auto p1Rx = summarize(series.p1.rxBytes);
-		const double runMeanMs = run.mean / 1000.0;
-		const double runMedianMs = run.median / 1000.0;
-		const double runP95Ms = run.p95 / 1000.0;
-		const double runP99Ms = run.p99 / 1000.0;
-		const double runMinMs = run.min / 1000.0;
-		const double runMaxMs = run.max / 1000.0;
 		const double totalCommBytes = p0Tx.mean + p1Tx.mean;
 		const bool ok = (cnt.fail == 0 && cnt.mismatch == 0);
 		const auto rb = RbOkvsResolve(args.setSize, args.rb);
+		auto perm = makePi(args.pi);
 
 		out << "# PQPSI RB-OKVS Benchmark\n\n";
 		out << std::fixed << std::setprecision(2);
@@ -737,13 +822,28 @@ namespace
 		out << "| rb_lambda | " << rb.lambda << " |\n";
 		out << "| rb_lambda_real | " << rb.lambdaReal << " |\n";
 		out << "| thread_mode | " << (args.rb.multiThread ? "multi" : "single") << " |\n";
+		out << "| party_threads | 2 |\n";
+		out << "| worker_threads | " << rb.workerThreads << " |\n";
+		out << "| worker_threads_requested | " << (args.rb.workerThreads == 0 ? "auto" : std::to_string(args.rb.workerThreads)) << " |\n";
 		out << "| rb_eps | " << rb.eps << " |\n";
 		out << "| rb_m | " << rb.columns << " |\n";
 		out << "| rb_w | " << rb.bandWidth << " |\n";
+		out << "| pi | " << perm->name() << " |\n";
+		out << "| pi_detail | " << perm->detail() << " |\n";
+		out << "| pi_n | " << perm->n() << " |\n";
+		out << "| pi_s | " << perm->s() << " |\n";
+		out << "| pi_lambda | " << args.pi.lambda << " |\n";
+		out << "| pi_rounds | " << perm->rounds() << " |\n";
 		out << "| sim_net_delay_ms | " << args.net.delayMs << " |\n";
 		out << "| sim_net_bw_MBps | " << args.net.bwMBps << " |\n";
-		out << "| runtime_mean_ms | " << runMeanMs << " |\n";
-		out << "| runtime_p95_ms | " << runP95Ms << " |\n";
+		out << "| protocol_runtime_mean_ms | " << protocol.mean << " |\n";
+		out << "| protocol_runtime_median_ms | " << protocol.median << " |\n";
+		out << "| protocol_runtime_p95_ms | " << protocol.p95 << " |\n";
+		out << "| protocol_runtime_p99_ms | " << protocol.p99 << " |\n";
+		out << "| protocol_runtime_min_ms | " << protocol.min << " |\n";
+		out << "| protocol_runtime_max_ms | " << protocol.max << " |\n";
+		out << "| party0_protocol_mean_ms | " << p0Protocol.mean << " |\n";
+		out << "| party1_protocol_mean_ms | " << p1Protocol.mean << " |\n";
 		out << "| total_communication_kb_mean | " << (totalCommBytes / 1024.0) << " |\n";
 		out << "| overall_status | " << (ok ? "ok" : "needs_check") << " |\n";
 		out << "\n";
@@ -757,29 +857,31 @@ namespace
 		out << "\n";
 
 		out << "## Party Results\n";
-		writeParty(out, "party0", p0Total, p0Key, p0Pi, p0OkEnc, p0OkDec, p0Send, p0Recv, p0Kem, p0Inv);
-		writeParty(out, "party1", p1Total, p1Key, p1Pi, p1OkEnc, p1OkDec, p1Send, p1Recv, p1Kem, p1Inv);
+		writeParty(out, "party0", p0Protocol, p0Prep, p0Key, p0Mask, p0Pi, p0OkEnc, p0OkDec, p0Send, p0Recv, p0Kem, p0Inv);
+		writeParty(out, "party1", p1Protocol, p1Prep, p1Key, p1Mask, p1Pi, p1OkEnc, p1OkDec, p1Send, p1Recv, p1Kem, p1Inv);
 
-		out << "## Runtime Distribution\n";
+		out << "## Protocol Distribution\n";
 		out << "| metric | ms |\n";
 		out << "|---|---:|\n";
-		out << "| runtime_mean_ms | " << runMeanMs << " |\n";
-		out << "| runtime_median_ms | " << runMedianMs << " |\n";
-		out << "| runtime_p95_ms | " << runP95Ms << " |\n";
-		out << "| runtime_p99_ms | " << runP99Ms << " |\n";
-		out << "| runtime_min_ms | " << runMinMs << " |\n";
-		out << "| runtime_max_ms | " << runMaxMs << " |\n";
+		out << "| protocol_runtime_mean_ms | " << protocol.mean << " |\n";
+		out << "| protocol_runtime_median_ms | " << protocol.median << " |\n";
+		out << "| protocol_runtime_p95_ms | " << protocol.p95 << " |\n";
+		out << "| protocol_runtime_p99_ms | " << protocol.p99 << " |\n";
+		out << "| protocol_runtime_min_ms | " << protocol.min << " |\n";
+		out << "| protocol_runtime_max_ms | " << protocol.max << " |\n";
 		out << "\n";
 
 		out << "## Per-Round Results\n";
-		out << "| round | runtime_ms | party0_total_ms | party1_total_ms | total_communication_kb |\n";
+		out << "| round | protocol_runtime_ms | party0_protocol_ms | party1_protocol_ms | total_communication_kb |\n";
 		out << "|---:|---:|---:|---:|---:|\n";
 		for (size_t i = 0; i < series.runUs.size(); ++i)
 		{
+			const double p0Prot = p0ProtocolTimes[i];
+			const double p1Prot = p1ProtocolTimes[i];
 			out << "| " << (i + 1)
-				<< " | " << (series.runUs[i] / 1000.0)
-				<< " | " << series.p0.totalMs[i]
-				<< " | " << series.p1.totalMs[i]
+				<< " | " << std::max(p0Prot, p1Prot)
+				<< " | " << p0Prot
+				<< " | " << p1Prot
 				<< " | " << ((series.p0.txBytes[i] + series.p1.txBytes[i]) / 1024.0)
 				<< " |\n";
 		}
@@ -814,6 +916,9 @@ namespace
 		out << "| rb_lambda | " << rb.lambda << " |\n";
 		out << "| rb_lambda_real | " << rb.lambdaReal << " |\n";
 		out << "| thread_mode | " << (args.rb.multiThread ? "multi" : "single") << " |\n";
+		out << "| party_threads | 2 |\n";
+		out << "| worker_threads | " << rb.workerThreads << " |\n";
+		out << "| worker_threads_requested | " << (args.rb.workerThreads == 0 ? "auto" : std::to_string(args.rb.workerThreads)) << " |\n";
 		out << "| rb_eps | " << rb.eps << " |\n";
 		out << "| rb_columns | " << rb.columns << " |\n";
 		out << "| rb_band_width | " << rb.bandWidth << " |\n";
@@ -828,7 +933,7 @@ namespace
 		out << "| network_note | " << args.net.note << " |\n";
 		out << "| network_settings_file | " << (args.net.file.empty() ? "none" : args.net.file) << " |\n";
 		out << "| port_base_seed | " << args.portSeed << " |\n";
-		out << "| per_round_port_step | 17 |\n";
+		out << "| per_round_port_step | 64 |\n";
 		out << "| port_retry_step | 101 |\n";
 		out << "| port_retry_total | " << cnt.portRetry << " |\n";
 		out << "| warmup_rounds | " << args.warmups << " |\n";

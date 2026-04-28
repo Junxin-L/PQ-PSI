@@ -216,6 +216,12 @@ namespace osuCrypto
             a[i] ^= b[i];
     }
 
+    inline void RBXor(block* a, const block* b, size_t n)
+    {
+        for (size_t i = 0; i < n; ++i)
+            a[i] ^= b[i];
+    }
+
     inline bool RBRows(
         const std::vector<block>& setKeys,
         const std::vector<std::vector<block>>& setValues,
@@ -239,7 +245,7 @@ namespace osuCrypto
             throw std::invalid_argument("RBRows columns < bandWidth");
 
         rows.resize(setKeys.size());
-        RBFor(setKeys.size(), params.multiThread, [&](size_t begin, size_t end)
+        RBFor(setKeys.size(), params.multiThread, params.workerThreads, [&](size_t begin, size_t end)
         {
             const auto hash = RBMakeHashCtx(params);
             for (size_t i = begin; i < end; ++i)
@@ -257,6 +263,63 @@ namespace osuCrypto
         });
 
         std::stable_sort(rows.begin(), rows.end(), [](const RBRow& a, const RBRow& b)
+        {
+            return a.start < b.start;
+        });
+        return true;
+    }
+
+    inline block* RBFlatPtr(std::vector<block>& values, size_t rowSize, const RBFlatRow& row)
+    {
+        return values.data() + row.rhs;
+    }
+
+    inline const block* RBFlatPtr(const std::vector<block>& values, size_t rowSize, const RBFlatRow& row)
+    {
+        return values.data() + row.rhs;
+    }
+
+    inline bool RBRowsFlat(
+        const std::vector<block>& setKeys,
+        const std::vector<block>& setValues,
+        size_t rowSize,
+        size_t columns,
+        size_t bandWidth,
+        const RBParams& params,
+        std::vector<RBFlatRow>& rows,
+        std::vector<block>& rhs)
+    {
+        if (rowSize == 0)
+            throw std::invalid_argument("RBRowsFlat empty row");
+        if (setValues.size() != setKeys.size() * rowSize)
+            throw std::invalid_argument("RBRowsFlat key/value mismatch");
+        if (setKeys.empty())
+        {
+            rows.clear();
+            rhs.clear();
+            return true;
+        }
+        if (columns < bandWidth)
+            throw std::invalid_argument("RBRowsFlat columns < bandWidth");
+
+        rows.resize(setKeys.size());
+        rhs.resize(setValues.size());
+        RBFor(setKeys.size(), params.multiThread, params.workerThreads, [&](size_t begin, size_t end)
+        {
+            const auto hash = RBMakeHashCtx(params);
+            for (size_t i = begin; i < end; ++i)
+            {
+                const u64 h = RBHash64(setKeys[i], hash.start);
+                const size_t range = columns - bandWidth + 1;
+                rows[i].start = (range == 0) ? 0 : static_cast<size_t>(h % range);
+                rows[i].rhs = i * rowSize;
+                std::memcpy(rhs.data() + rows[i].rhs, setValues.data() + rows[i].rhs, rowSize * sizeof(block));
+                RBMaskBits(RBMask256(setKeys[i], hash), bandWidth, rows[i].bits);
+                RBEnsureBits(rows[i].bits);
+            }
+        });
+
+        std::stable_sort(rows.begin(), rows.end(), [](const RBFlatRow& a, const RBFlatRow& b)
         {
             return a.start < b.start;
         });

@@ -33,6 +33,9 @@
     <ClCompile Include="pqpsi\protocols\send.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\thirdparty\sneik\sneik_f512.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="util.h">
@@ -41,7 +44,28 @@
     <ClInclude Include="pqpsi\pqpsi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="pqpsi\pi.h">
+    <ClInclude Include="permutation\api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="permutation\cons.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="permutation\hctr2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="permutation\params.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="permutation\permutation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="permutation\small.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="permutation\sneik.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="permutation\types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="pqpsi\protocols\party.h">
@@ -51,6 +75,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Keccak-f.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\thirdparty\sneik\sneik_f512.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

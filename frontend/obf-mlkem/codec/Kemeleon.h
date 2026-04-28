@@ -23,6 +23,19 @@ namespace osuCrypto
 			u64 zeroFails = 0;
 		};
 
+		struct DecodeKeyWork
+		{
+			std::vector<u8> r;
+			std::vector<u16> t;
+			std::vector<u8> packedT;
+		};
+
+		struct EncodeKeyWork
+		{
+			std::vector<u16> t;
+			std::vector<u8> r;
+		};
+
 		explicit Kemeleon(MlKem::Mode mode = MlKem::Mode::MlKem768);
 
 		void setMode(MlKem::Mode mode);
@@ -35,10 +48,12 @@ namespace osuCrypto
 		u64 codeCipherBytes() const;
 
 		bool encodeKey(span<const u8> key, std::vector<u8>& out) const;
+		bool encodeKey(span<const u8> key, std::vector<u8>& out, EncodeKeyWork& work) const;
 		bool encodeCipher(span<const u8> cipher, std::vector<u8>& out) const;
 		bool encodeCipherProfiled(span<const u8> cipher, std::vector<u8>& out, EncodeCipherStats& stats) const;
 
 		bool decodeKey(span<const u8> data, std::vector<u8>& key) const;
+		bool decodeKey(span<const u8> data, span<u8> key, DecodeKeyWork& work) const;
 		bool decodeCipher(span<const u8> data, std::vector<u8>& cipher) const;
 
 	private:

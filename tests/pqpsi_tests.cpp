@@ -54,6 +54,28 @@ namespace
         return os.str();
     }
 
+    u8 hexNibble(char c)
+    {
+        if (c >= '0' && c <= '9') return static_cast<u8>(c - '0');
+        if (c >= 'a' && c <= 'f') return static_cast<u8>(10 + c - 'a');
+        if (c >= 'A' && c <= 'F') return static_cast<u8>(10 + c - 'A');
+        throw std::invalid_argument("bad hex digit");
+    }
+
+    std::vector<u8> hexBytes(const char* hex)
+    {
+        const std::string s(hex ? hex : "");
+        if ((s.size() % 2) != 0)
+            throw std::invalid_argument("odd hex length");
+
+        std::vector<u8> out(s.size() / 2);
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            out[i] = static_cast<u8>((hexNibble(s[i * 2]) << 4) | hexNibble(s[i * 2 + 1]));
+        }
+        return out;
+    }
+
     double meanOf(const std::vector<double>& xs)
     {
         if (xs.empty())
@@ -76,6 +98,7 @@ namespace
         u64 hits = std::numeric_limits<u64>::max();
         NetCfg net;
         RbCfg rb{};
+        PiCfg pi{};
     };
 
     struct PqRow
@@ -107,6 +130,15 @@ namespace
                 args.rb.columns = parseU64(argv[++i], args.rb.columns);
             else if (argEq(argv[i], "--rb-w") && i + 1 < argc)
                 args.rb.bandWidth = parseU64(argv[++i], args.rb.bandWidth);
+            else if (argEq(argv[i], "--pi") && i + 1 < argc)
+                setPi(args.pi, argv[++i]);
+            else if (argEq(argv[i], "--pi-lambda") && i + 1 < argc)
+                args.pi.lambda = parseU64(argv[++i], args.pi.lambda);
+            else if ((argEq(argv[i], "--threads") || argEq(argv[i], "--worker-threads")) && i + 1 < argc)
+            {
+                args.rb.workerThreads = parseU64(argv[++i], args.rb.workerThreads);
+                args.rb.multiThread = args.rb.workerThreads != 1;
+            }
             else if (argEq(argv[i], "--hits") && i + 1 < argc)
                 args.hits = parseU64(argv[++i], args.hits);
             else if (argEq(argv[i], "--misses") && i + 1 < argc)
@@ -119,7 +151,10 @@ namespace
             else if (argEq(argv[i], "--bw-mbps") && i + 1 < argc)
                 args.net.bwMBps = parseDouble(argv[++i], args.net.bwMBps);
             else if (argEq(argv[i], "--single-thread"))
+            {
                 args.rb.multiThread = false;
+                args.rb.workerThreads = 1;
+            }
             else if (argEq(argv[i], "--multi-thread"))
                 args.rb.multiThread = true;
             else
@@ -138,7 +173,7 @@ namespace
 
         PqRow row;
         const auto t0 = std::chrono::steady_clock::now();
-        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits);
+        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits, &args.pi);
         const auto t1 = std::chrono::steady_clock::now();
         row.runtimeMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
         row.commKB =
@@ -172,12 +207,16 @@ namespace
             sendMs.push_back(row.prof.party1.totalMs);
         }
 
+        const auto rb = RbOkvsResolve(args.setSize, args.rb);
         std::cout
             << "pqpsi-rbokvs\n"
             << "set=" << args.setSize
             << " rounds=" << args.rounds
             << " hits=" << (args.hits == std::numeric_limits<u64>::max() ? args.setSize - 1 : args.hits)
             << " thread_mode=" << (args.rb.multiThread ? "multi" : "single")
+            << " party_threads=2"
+            << " worker_threads=" << rb.workerThreads
+            << " pi=" << makePi(args.pi)->name()
             << " status=" << (ok ? "ok" : "fail") << "\n"
             << "runtime_ms=" << fmt(meanOf(runMs))
             << " comm_kb=" << fmt(meanOf(commKB))
@@ -194,6 +233,7 @@ namespace
         u64 w = 64;
         u64 rounds = 20;
         bool multiThread = true;
+        size_t workerThreads = 4;
     };
 
     RbArgs parseRbArgs(int argc, char** argv, int start)
@@ -207,9 +247,17 @@ namespace
         while (i < argc)
         {
             if (argEq(argv[i], "--single-thread"))
+            {
                 args.multiThread = false;
+                args.workerThreads = 1;
+            }
             else if (argEq(argv[i], "--multi-thread"))
                 args.multiThread = true;
+            else if ((argEq(argv[i], "--threads") || argEq(argv[i], "--worker-threads")) && i + 1 < argc)
+            {
+                args.workerThreads = parseU64(argv[++i], args.workerThreads);
+                args.multiThread = args.workerThreads != 1;
+            }
             else
                 throw std::invalid_argument(std::string("unknown arg: ") + argv[i]);
             ++i;
@@ -233,6 +281,7 @@ namespace
         rb.eps = args.eps;
         rb.bandWidth = args.w;
         rb.multiThread = args.multiThread;
+        rb.workerThreads = args.workerThreads;
         rb.columns = static_cast<size_t>(std::ceil((1.0 + args.eps) * static_cast<double>(std::max<u64>(args.n, 1))));
 
         std::vector<block> table;
@@ -279,6 +328,7 @@ namespace
             << " w=" << args.w
             << " rounds=" << args.rounds
             << " thread_mode=" << (args.multiThread ? "multi" : "single")
+            << " worker_threads=" << RBWorkerThreads(args.multiThread, args.workerThreads)
             << " pass=" << pass << "/" << args.rounds
             << " g_40=" << fmt(g40)
             << " runtime_ms=" << fmt(meanOf(runMs))
@@ -348,12 +398,133 @@ namespace
         return 0;
     }
 
+    int runHctr2()
+    {
+        struct Vec
+        {
+            const char* key;
+            const char* tweak;
+            const char* plain;
+            const char* cipher;
+        };
+
+        // Google HCTR2 AES-128 vectors from github.com/google/hctr2.
+        const std::array<Vec, 6> vecs{{
+            {
+                "74f98f60786abfa85b0bbba059e0f91e",
+                "",
+                "6b26837bdc1c583dc142c6ab7b3f43b0",
+                "dd05a8ae51f1e8212fd6c33b9467036d",
+            },
+            {
+                "8d36a6f8fe0ad10effbdf374ea1a5919",
+                "",
+                "99d5cbe30b34037f655f60fad017667f7a331e941c3ae9eebae09458e6a136",
+                "99b50bd965c89e8976d3ce7215c795daff048c8fe6050b2b44a290fa2bf3fe",
+            },
+            {
+                "03e1412f973bef6d4a9fa09f3f0601d2",
+                "",
+                "bc3aa5c7b70bc65fe48f35df8e4a5b8cfd90fccef69315aaa92e51eaf830a1e63fba4fbae6d9ddb34e469d895c8a886a788bd625f92e75c5f1472232bb948e549e63091901265260360434a0a98b06bc7bfc4c655af93fa4c8f9b4e68538925506b82597c9c59f9f966d2be1d7c691bba8290595bedb339609d687f83381ea7d",
+                "b6e1673512469b8218f7f54b065a72f7fe172d6edcfe80b2b745a916c1c13fe2eadc838b74a29a532690462eaff2fdf52533be50f63aaa47058ddd28761752bcc7cee101625b8d3b6aef0b4792348c444089a79ea34cae06c74d4ffad6d239ae5b7e6fddd3dc97e2d6af8f5ffce146ba09f0ad1ba5dc40d5914a39557662fb55",
+            },
+            {
+                "e893a5428fa81bb4c2462d5a8ec3318b",
+                "86",
+                "2367096be680e11f57dc68641471b95c",
+                "d4a95bdf8de60134ea75fa14f388b835",
+            },
+            {
+                "8171c4d67e21d6a250235be986da8e3f",
+                "10",
+                "5477797774f15a78b691d443b14be3560b88f5b95977549508e85ebd7f31bb",
+                "0a999af4e64b89473ae7ce0c1e06a03275e74f5640af8f15af291e04a097cd",
+            },
+            {
+                "ce6239eb619bbf54fa1afcee49da9774",
+                "",
+                "650bf6c1baaf38493b0d6e52168da76c8efb28d5f9e26cec3b4f1a7d016e10be10e280aa36663eb301ebfc640b5de9788544e54708919c057b48ec76c0397f857f090bfde70d842ff0a322cbdf1d68af0d233762f8d103a8fda0d86cba40a5d2c1292bb2b39e6202b5d7b5c9bdf83a2479b6b21b9eb3950aa58eae3c80abea8a642af68f46b5e920c4f8d705f01f0c008a7fd931022bb1cedbee230a571e93f9d058a4e8fc586f55dc2c49711ad9f9ac024d80588017ce846011949e5839dd783e123193ecc944a252e9c0b7a868b9df1ec5095f84114ac06e2c4fa2b36b49ee964e186ed1f718c7f872ff1fa3f218aa948a388e477a3c2a274506edd883bb",
+                "1ef34e0b44d700f0b82c6889c80efb0ec6f021f69d0a936fe4c455ea3e6f08f6778878b4409c48d64cc4733a6674278fd59a5dbb621a894dcfa7ecebf3d580a78fe99c4c382a8bae77ac28ada91c2a495d16b5a5b15b4d571afe8b7f10b60ebadb9219b83d95142753667ed3526c0adcc4495b0450792acb54cfedee5a004d0032c16a258fe567628c2ce757d3dc3ef9a6e158df9a43fa72c641d853c23bfa6dacfedc56381780e2814ecbe0f915bccae0bd1710f9ecd898acf43bc96ed14c40ab3cad34e2210aa104934dd796e58a28ad7473d07ea1d942c8db937065889095166749ad3dc5d06b9c6ac04b89086df66085c535d31b6de6ce65c7efebfa0c",
+            },
+        }};
+
+        for (const auto& v : vecs)
+        {
+            auto key = hexBytes(v.key);
+            auto tweak = hexBytes(v.tweak);
+            auto plain = hexBytes(v.plain);
+            auto cipher = hexBytes(v.cipher);
+            if (key.size() != 16 || plain.size() != cipher.size() || plain.size() < 16)
+                throw std::runtime_error("bad HCTR2 test vector");
+
+            pqperm::hctr2::Key hkey(key.data(), tweak.data(), tweak.size());
+            auto got = plain;
+            pqperm::hctr2::crypt(got.data(), got.size(), hkey, true);
+            if (got != cipher)
+                throw std::runtime_error("HCTR2 encrypt vector failed");
+            pqperm::hctr2::crypt(got.data(), got.size(), hkey, false);
+            if (got != plain)
+                throw std::runtime_error("HCTR2 decrypt vector failed");
+        }
+
+        std::cout << "hctr2\nstatus=ok\nvectors=" << vecs.size() << "\n";
+        return 0;
+    }
+
+    int runSneik()
+    {
+        auto small = pi::makePerm(pi::Kind::SneikF512);
+        for (u64 t = 0; t < 1024; ++t)
+        {
+            pi::Perm::Buf state(small->bytes());
+            for (size_t i = 0; i < state.size(); ++i)
+            {
+                state[i] = static_cast<u8>(0xA5 + 13 * i + t);
+            }
+
+            const auto want = state;
+            small->apply(state);
+            small->invert(state);
+            if (state != want)
+            {
+                throw std::runtime_error("SNEIK-f512 inverse roundtrip failed");
+            }
+        }
+
+        PiCfg cfg;
+        setPi(cfg, "sneik-f512");
+        auto cons = makePi(cfg, 0);
+        std::vector<u8> key(KEM_key_size_bit / 8);
+        for (size_t i = 0; i < key.size(); ++i)
+        {
+            key[i] = static_cast<u8>(0x3C + 7 * i);
+        }
+
+        const auto want = key;
+        cons->encryptBytes(key.data(), key.size());
+        cons->decryptBytes(key.data(), key.size());
+        if (key != want)
+        {
+            throw std::runtime_error("ConsPi/SNEIK-f512 roundtrip failed");
+        }
+
+        std::cout
+            << "sneik-f512\n"
+            << "status=ok\n"
+            << "roundtrip=1024\n"
+            << "conspi_rounds=" << cons->rounds() << "\n"
+            << "conspi_s=" << cons->s() << "\n";
+        return 0;
+    }
+
     void usage(const char* prog)
     {
         std::cout
             << "Usage\n"
-            << "  " << prog << " pqpsi-rbokvs [setSize] [warmups] [rounds] [portBase] [--hits v] [--rb-eps v] [--rb-w v] [--rb-cols v] [--rb-lambda v] [--single-thread|--multi-thread]\n"
-            << "  " << prog << " rbokvs [setSize] [eps] [w] [rounds] [--single-thread|--multi-thread]\n"
+            << "  " << prog << " pqpsi-rbokvs [setSize] [warmups] [rounds] [portBase] [--hits v] [--rb-eps v] [--rb-w v] [--rb-cols v] [--rb-lambda v] [--pi conspi|hctr|keccak800|keccak1600|sneik-f512] [--threads v] [--single-thread|--multi-thread]\n"
+            << "  " << prog << " rbokvs [setSize] [eps] [w] [rounds] [--threads v] [--single-thread|--multi-thread]\n"
+            << "  " << prog << " hctr2\n"
+            << "  " << prog << " sneik\n"
             << "  " << prog << " kemeleon\n";
     }
 }
@@ -372,6 +543,10 @@ int main(int argc, char** argv)
             return runPqPsi(argc, argv, 2);
         if (argEq(argv[1], "rbokvs"))
             return runRbOkvs(argc, argv, 2);
+        if (argEq(argv[1], "hctr2"))
+            return runHctr2();
+        if (argEq(argv[1], "sneik") || argEq(argv[1], "sneik-f512"))
+            return runSneik();
         if (argEq(argv[1], "kemeleon"))
             return runKemeleon();
 

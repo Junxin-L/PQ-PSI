@@ -26,20 +26,22 @@ set(SRC_KECCAK
     ${CMAKE_SOURCE_DIR}/thirdparty/KeccakTools/Sources/Keccak-f.cpp
     ${CMAKE_SOURCE_DIR}/thirdparty/KeccakTools/Sources/transformations.cpp)
 
+set(SRC_SNEIK
+    ${CMAKE_SOURCE_DIR}/thirdparty/sneik/sneik_f512.c)
+
 file(GLOB SRC_OBFMLKEM_MIN
     ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/backend/*.cpp
     ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/codec/*.cpp
     ${CMAKE_SOURCE_DIR}/frontend/obf-mlkem/native/*.c)
 
 if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
-    add_executable(frontend.exe ${SRC_FRONTEND} ${SRC_KECCAK})
+    add_executable(frontend.exe ${SRC_FRONTEND} ${SRC_KECCAK} ${SRC_SNEIK})
 endif()
 
-if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
-    add_executable(construction_permutation_bench
-        ${CMAKE_SOURCE_DIR}/frontend/benchmarks/ConstructionPermutation_Bench.cpp
-        ${SRC_KECCAK})
-endif()
+add_executable(construction_permutation_bench
+    ${CMAKE_SOURCE_DIR}/frontend/benchmarks/ConstructionPermutation_Bench.cpp
+    ${SRC_KECCAK}
+    ${SRC_SNEIK})
 
 add_executable(pqpsi_rbokvs_bench
     ${CMAKE_SOURCE_DIR}/frontend/benchmarks/PqPsi_RbOkvs_Bench.cpp
@@ -49,7 +51,8 @@ add_executable(pqpsi_rbokvs_bench
     ${CMAKE_SOURCE_DIR}/frontend/pqpsi/protocols/send.cpp
     ${CMAKE_SOURCE_DIR}/libOPRF/Hashing/polyFFT.cpp
     ${SRC_OBFMLKEM_MIN}
-    ${SRC_KECCAK})
+    ${SRC_KECCAK}
+    ${SRC_SNEIK})
 
 add_executable(rbokvs_g_check
     ${CMAKE_SOURCE_DIR}/frontend/benchmarks/RbOkvs_G_Check.cpp)
@@ -62,7 +65,8 @@ add_executable(rbokvs_pqpsi_test
     ${CMAKE_SOURCE_DIR}/frontend/pqpsi/protocols/send.cpp
     ${CMAKE_SOURCE_DIR}/libOPRF/Hashing/polyFFT.cpp
     ${SRC_OBFMLKEM_MIN}
-    ${SRC_KECCAK})
+    ${SRC_KECCAK}
+    ${SRC_SNEIK})
 
 add_executable(pqpsi_tests
     ${CMAKE_SOURCE_DIR}/tests/pqpsi_tests.cpp
@@ -72,7 +76,8 @@ add_executable(pqpsi_tests
     ${CMAKE_SOURCE_DIR}/frontend/pqpsi/protocols/send.cpp
     ${CMAKE_SOURCE_DIR}/libOPRF/Hashing/polyFFT.cpp
     ${SRC_OBFMLKEM_MIN}
-    ${SRC_KECCAK})
+    ${SRC_KECCAK}
+    ${SRC_SNEIK})
 
 
 #############################################
@@ -88,6 +93,7 @@ target_link_libraries(pqpsi_rbokvs_bench cryptoTools)
 target_link_libraries(rbokvs_g_check cryptoTools)
 target_link_libraries(rbokvs_pqpsi_test cryptoTools)
 target_link_libraries(pqpsi_tests cryptoTools)
+target_link_libraries(construction_permutation_bench cryptoTools)
 
 # Reminder: RB-OKVS benchmark needs NTL/gf2x for OKVS code and GMP/libsodium for obf-mlkem.
 find_library(PQPSI_GMP_LIB NAMES gmp HINTS /usr/local/lib /opt/homebrew/lib)

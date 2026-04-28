@@ -126,18 +126,22 @@ namespace osuCrypto
 
 	bool Kemeleon::encodeKey(span<const u8> key, std::vector<u8>& out) const
 	{
+		EncodeKeyWork work;
+		return encodeKey(key, out, work);
+	}
+
+	bool Kemeleon::encodeKey(span<const u8> key, std::vector<u8>& out, EncodeKeyWork& work) const
+	{
 		if (key.size() != rawKeyBytes())
 		{
 			throw std::invalid_argument("Kemeleon key has unexpected size");
 		}
 
-		std::vector<u16> t;
 		// Split pk into t and rho
-		unpackPolyBytes(key.subspan(0, mInfo.polyBytes), t);
+		unpackPolyBytes(key.subspan(0, mInfo.polyBytes), work.t);
 
-		std::vector<u8> r;
 		// r <- VectorEncode(t)
-		if (!encodeVec(t, mInfo.vecBits, r))
+		if (!encodeVec(work.t, mInfo.vecBits, work.r))
 		{
 			out.clear();
 			return false;
@@ -145,7 +149,7 @@ namespace osuCrypto
 
 		out.resize(codeKeyBytes());
 		std::copy(key.begin() + mInfo.polyBytes, key.end(), out.begin());
-		std::copy(r.begin(), r.end(), out.begin() + rhoBytes);
+		std::copy(work.r.begin(), work.r.end(), out.begin() + rhoBytes);
 		// Fill the spare key bits so the last byte looks less structured
 		fillKeyHighBits(key, out);
 		return true;
@@ -231,29 +235,38 @@ namespace osuCrypto
 
 	bool Kemeleon::decodeKey(span<const u8> data, std::vector<u8>& key) const
 	{
-		if (data.size() != codeKeyBytes())
-		{
-			key.clear();
-			return false;
-		}
-
-		std::vector<u8> r(data.begin() + rhoBytes, data.begin() + rhoBytes + mInfo.vecBytes);
-		// Drop the spare key bits before VectorDecode
-		clearKeyHighBits(r);
-
-		std::vector<u16> t;
-		// t <- VectorDecode(r)
-		if (!decodeVec(r, mInfo.vecBits, mInfo.vecSize, t))
-		{
-			key.clear();
-			return false;
-		}
-
-		std::vector<u8> packedT;
-		packPolyBytes(t, packedT);
-
 		key.resize(rawKeyBytes());
-		std::copy(packedT.begin(), packedT.end(), key.begin());
+		DecodeKeyWork work;
+		if (!decodeKey(data, span<u8>(key.data(), key.size()), work))
+		{
+			key.clear();
+			return false;
+		}
+
+		return true;
+	}
+
+	bool Kemeleon::decodeKey(span<const u8> data, span<u8> key, DecodeKeyWork& work) const
+	{
+		if (data.size() != codeKeyBytes() || key.size() != rawKeyBytes())
+		{
+			return false;
+		}
+
+		work.r.resize(mInfo.vecBytes);
+		std::copy(data.begin() + rhoBytes, data.begin() + rhoBytes + mInfo.vecBytes, work.r.begin());
+		// Drop the spare key bits before VectorDecode
+		clearKeyHighBits(work.r);
+
+		// t <- VectorDecode(r)
+		if (!decodeVec(work.r, mInfo.vecBits, mInfo.vecSize, work.t))
+		{
+			return false;
+		}
+
+		packPolyBytes(work.t, work.packedT);
+
+		std::copy(work.packedT.begin(), work.packedT.end(), key.begin());
 		std::copy(data.begin(), data.begin() + rhoBytes, key.begin() + mInfo.polyBytes);
 		return true;
 	}

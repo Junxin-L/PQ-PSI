@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+export PATH="/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
+
 usage() {
     cat <<'EOF'
 Usage
@@ -11,6 +13,7 @@ Examples
   bash script/test-rbokvs-pqpsi.sh 256
   bash script/test-rbokvs-pqpsi.sh 256 128
   bash script/test-rbokvs-pqpsi.sh 256 128 1 5 43000 --rb-eps 0.10 --rb-w 96
+  bash script/test-rbokvs-pqpsi.sh 256 128 1 5 43000 --threads 4
 
 Defaults
   hits=n-1

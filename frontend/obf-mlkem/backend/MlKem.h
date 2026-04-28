@@ -55,9 +55,15 @@ namespace osuCrypto
 
 		KeyPair keyGen() const;
 		KeyPair keyGen(span<const u8> seed) const;
+		void keyGen(span<const u8> seed, span<u8> publicKey, span<u8> secretKey) const;
 
 		EncapResult encaps(span<const u8> publicKey) const;
 		EncapResult encaps(span<const u8> publicKey, span<const u8> seed) const;
+		void encaps(
+			span<const u8> publicKey,
+			span<const u8> seed,
+			span<u8> cipherText,
+			span<u8> sharedSecret) const;
 
 		std::array<u8, SharedSecretSize> decaps(span<const u8> cipherText, span<const u8> secretKey) const;
 

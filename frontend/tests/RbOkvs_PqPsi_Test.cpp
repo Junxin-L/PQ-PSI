@@ -30,6 +30,7 @@ namespace
         u64 portBase = 43000;
         NetCfg net;
         RbCfg rb{};
+        PiCfg pi{};
         bool trace = false;
         bool showWarmups = false;
         u64 hits = std::numeric_limits<u64>::max();
@@ -38,7 +39,11 @@ namespace
     struct PartySeries
     {
         std::vector<double> totalMs;
+        std::vector<double> setupMs;
+        std::vector<double> teardownMs;
+        std::vector<double> prepMs;
         std::vector<double> keyMs;
+        std::vector<double> maskMs;
         std::vector<double> piMs;
         std::vector<double> okEncMs;
         std::vector<double> okDecMs;
@@ -132,10 +137,32 @@ namespace
         return std::accumulate(xs.begin(), xs.end(), 0.0) / static_cast<double>(xs.size());
     }
 
+    double protocolMean(const PartySeries& p)
+    {
+        if (p.totalMs.empty())
+        {
+            return 0.0;
+        }
+
+        double sum = 0.0;
+        for (size_t i = 0; i < p.totalMs.size(); ++i)
+        {
+            const double setup = i < p.setupMs.size() ? p.setupMs[i] : 0.0;
+            const double teardown = i < p.teardownMs.size() ? p.teardownMs[i] : 0.0;
+            const double v = p.totalMs[i] - setup - teardown;
+            sum += v > 0.0 ? v : 0.0;
+        }
+        return sum / static_cast<double>(p.totalMs.size());
+    }
+
     void addParty(PartySeries& out, const PqPsiStageMs& ms)
     {
         out.totalMs.push_back(ms.totalMs);
+        out.setupMs.push_back(ms.setupMs);
+        out.teardownMs.push_back(ms.teardownMs);
+        out.prepMs.push_back(ms.prepMs);
         out.keyMs.push_back(ms.kemKeyGenMs);
+        out.maskMs.push_back(ms.maskMs);
         out.piMs.push_back(ms.permuteMs);
         out.okEncMs.push_back(ms.okvsEncodeMs);
         out.okDecMs.push_back(ms.okvsDecodeMs);
@@ -178,6 +205,9 @@ namespace
             << "  --rb-eps <v>\n"
             << "  --rb-cols <v>\n"
             << "  --rb-w <v>\n"
+            << "  --pi <conspi|hctr|keccak800|keccak1600|sneik-f512>\n"
+            << "  --pi-lambda <v>\n"
+            << "  --threads <v>\n"
             << "  --hits <v>\n"
             << "  --misses <v>\n"
             << "  --single-thread\n"
@@ -222,6 +252,19 @@ namespace
             {
                 args.rb.bandWidth = parseU64(argv[++i], args.rb.bandWidth);
             }
+            else if (argEq(argv[i], "--pi") && i + 1 < argc)
+            {
+                setPi(args.pi, argv[++i]);
+            }
+            else if (argEq(argv[i], "--pi-lambda") && i + 1 < argc)
+            {
+                args.pi.lambda = parseU64(argv[++i], args.pi.lambda);
+            }
+            else if ((argEq(argv[i], "--threads") || argEq(argv[i], "--worker-threads")) && i + 1 < argc)
+            {
+                args.rb.workerThreads = parseU64(argv[++i], args.rb.workerThreads);
+                args.rb.multiThread = args.rb.workerThreads != 1;
+            }
             else if (argEq(argv[i], "--hits") && i + 1 < argc)
             {
                 args.hits = parseU64(argv[++i], args.hits);
@@ -234,6 +277,7 @@ namespace
             else if (argEq(argv[i], "--single-thread"))
             {
                 args.rb.multiThread = false;
+                args.rb.workerThreads = 1;
             }
             else if (argEq(argv[i], "--multi-thread"))
             {
@@ -266,7 +310,7 @@ namespace
 
         RunRow row;
         const auto t0 = std::chrono::steady_clock::now();
-        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits);
+        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits, &args.pi);
         const auto t1 = std::chrono::steady_clock::now();
         row.runtimeMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
         row.commKB =
@@ -276,6 +320,7 @@ namespace
 
     void printHeader(const Args& args, const RbInfo& rb)
     {
+        auto perm = makePi(args.pi);
         std::cout
             << "RB-OKVS PQPSI Test\n"
             << "setSize=" << args.setSize
@@ -293,19 +338,38 @@ namespace
             << " lambda=" << rb.lambda
             << " lambda_real=" << fmt(rb.lambdaReal)
             << " thread_mode=" << (args.rb.multiThread ? "multi" : "single")
+            << " party_threads=2"
+            << " worker_threads=" << rb.workerThreads
+            << "\n"
+            << "pi: " << perm->name()
+            << " detail=" << perm->detail()
+            << " n=" << perm->n()
+            << " s=" << perm->s()
+            << " lambda=" << args.pi.lambda
+            << " rounds=" << perm->rounds()
             << "\n\n";
     }
 
     void printRunRow(size_t idx, const RunRow& row, bool warmup)
     {
+        const double p0Protocol = std::max(
+            0.0,
+            row.prof.party0.totalMs - row.prof.party0.setupMs - row.prof.party0.teardownMs);
+        const double p1Protocol = std::max(
+            0.0,
+            row.prof.party1.totalMs - row.prof.party1.setupMs - row.prof.party1.teardownMs);
+        const double protocol = std::max(p0Protocol, p1Protocol);
+
         std::cout
             << (warmup ? "[warmup] " : "[round ] ")
             << std::setw(2) << (idx + 1)
             << "  status=" << (row.ok ? "ok" : "fail")
             << "  hits=" << row.got << "/" << row.want
-            << "  p0=" << fmt(row.prof.party0.totalMs)
+            << "  protocol=" << fmt(protocol)
             << " ms"
-            << "  p1=" << fmt(row.prof.party1.totalMs)
+            << "  p0=" << fmt(p0Protocol)
+            << " ms"
+            << "  p1=" << fmt(p1Protocol)
             << " ms"
             << "  comm=" << fmt(row.commKB)
             << " KB"
@@ -321,9 +385,13 @@ namespace
             const std::vector<double>* b;
         };
 
+        const std::vector<double> recvProtocol{protocolMean(ser.recv)};
+        const std::vector<double> sendProtocol{protocolMean(ser.send)};
         const std::vector<RowDef> rows = {
-            {"total", &ser.recv.totalMs, &ser.send.totalMs},
+            {"protocol", &recvProtocol, &sendProtocol},
+            {"prep_alloc", &ser.recv.prepMs, &ser.send.prepMs},
             {"keygen", &ser.recv.keyMs, &ser.send.keyMs},
+            {"mask_pre", &ser.recv.maskMs, &ser.send.maskMs},
             {"permute", &ser.recv.piMs, &ser.send.piMs},
             {"permute_inv", &ser.recv.invMs, &ser.send.invMs},
             {"kem_ops", &ser.recv.kemMs, &ser.send.kemMs},
@@ -332,6 +400,25 @@ namespace
             {"net_send", &ser.recv.sendMs, &ser.send.sendMs},
             {"net_recv", &ser.recv.recvMs, &ser.send.recvMs},
         };
+
+        auto knownMean = [&](const PartySeries& p)
+        {
+            return meanOf(p.prepMs)
+                + meanOf(p.keyMs)
+                + meanOf(p.maskMs)
+                + meanOf(p.piMs)
+                + meanOf(p.invMs)
+                + meanOf(p.kemMs)
+                + meanOf(p.okEncMs)
+                + meanOf(p.okDecMs)
+                + meanOf(p.sendMs)
+                + meanOf(p.recvMs);
+        };
+
+        const double recvOtherRaw = protocolMean(ser.recv) - knownMean(ser.recv);
+        const double sendOtherRaw = protocolMean(ser.send) - knownMean(ser.send);
+        const double recvOther = recvOtherRaw > 0.0 ? recvOtherRaw : 0.0;
+        const double sendOther = sendOtherRaw > 0.0 ? sendOtherRaw : 0.0;
 
         std::cout
             << "Receiver                              Sender\n"
@@ -347,6 +434,13 @@ namespace
                 << std::right << std::setw(9) << fmt(meanOf(*row.b))
                 << "\n";
         }
+        std::cout
+            << std::left << std::setw(12) << "other"
+            << std::right << std::setw(9) << fmt(recvOther)
+            << "    "
+            << std::left << std::setw(12) << "other"
+            << std::right << std::setw(9) << fmt(sendOther)
+            << "\n";
         std::cout << "\n";
     }
 }
@@ -382,8 +476,8 @@ int main(int argc, char** argv)
         std::cout << "\n";
         printSideBySide(ser);
         std::cout
-            << "avg: party0=" << fmt(meanOf(ser.recv.totalMs))
-            << " ms  party1=" << fmt(meanOf(ser.send.totalMs))
+            << "avg_protocol: party0=" << fmt(protocolMean(ser.recv))
+            << " ms  party1=" << fmt(protocolMean(ser.send))
             << " ms  comm=" << fmt(meanOf(ser.commKB))
             << " KB\n";
         std::cout << "overall: " << (allOk ? "ok" : "needs_check") << "\n";

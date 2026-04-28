@@ -1,5 +1,6 @@
 #pragma once
 
+#include "parallel.h"
 #include "types.h"
 
 namespace osuCrypto
@@ -10,11 +11,9 @@ namespace osuCrypto
         n = std::max<size_t>(n, 1);
 
         if (n <= 128)
-            return 0.16;
-        if (n <= 256)
+            return 0.12;
+        if (n <= 1024)
             return 0.07;
-        if (n <= 512)
-            return 0.10;
         return 0.07;
     }
 
@@ -80,9 +79,13 @@ namespace osuCrypto
         // empirical fit for 2^7 to 2^9
         if (n <= 128)
         {
+            if (RBApprox(eps2, 0.10)) return 21.29;
+            if (RBApprox(eps2, 0.11)) return 20.63;
+            if (RBApprox(eps2, 0.12)) return 21.51;
+            if (RBApprox(eps2, 0.13)) return 19.97;
             if (RBApprox(eps2, 0.14)) return 21.51;
             if (RBApprox(eps2, 0.15)) return 26.80;
-            if (RBApprox(eps2, 0.16)) return 25.91;
+            if (RBApprox(eps2, 0.16)) return 22.39;
             if (RBApprox(eps2, 0.17)) return 21.29;
             if (RBApprox(eps2, 0.18)) return 24.15;
             if (RBApprox(eps2, 0.19)) return 23.27;
@@ -90,7 +93,7 @@ namespace osuCrypto
         }
         if (n <= 256)
         {
-            if (RBApprox(eps2, 0.07)) return 27.68;
+            if (RBApprox(eps2, 0.07)) return 25.36;
             if (RBApprox(eps2, 0.08)) return 27.68;
             if (RBApprox(eps2, 0.09)) return 24.15;
             if (RBApprox(eps2, 0.10)) return 26.80;
@@ -99,12 +102,17 @@ namespace osuCrypto
         }
         if (n <= 512)
         {
-            if (RBApprox(eps2, 0.07)) return 30.76;
+            if (RBApprox(eps2, 0.07)) return 24.59;
             if (RBApprox(eps2, 0.08)) return 27.68;
             if (RBApprox(eps2, 0.09)) return 28.12;
             if (RBApprox(eps2, 0.10)) return 26.80;
             if (RBApprox(eps2, 0.11)) return 27.90;
             if (RBApprox(eps2, 0.12)) return 26.80;
+        }
+
+        if (n <= 1024)
+        {
+            if (RBApprox(eps2, 0.07)) return 23.82;
         }
 
         // paper fit
@@ -183,9 +191,11 @@ namespace osuCrypto
         if (n <= 128)
             return 64;
         if (n <= 256)
-            return 144;
+            return 88;
         if (n <= 512)
             return 96;
+        if (n <= 1024)
+            return 104;
         if (n <= 2048)
             return 240;
 
@@ -264,6 +274,11 @@ namespace osuCrypto
             }
         }
 
+        if (!params.check)
+        {
+            return;
+        }
+
         const size_t needW = RBNeedW(info.n, info.lambda, info.eps);
         if (info.bandWidth < needW)
         {
@@ -286,6 +301,7 @@ namespace osuCrypto
         out.eps = RBEpsOf(out.n, out.columns);
         out.bandWidth = RBTableW(out.n, out.columns, params);
         out.lambdaReal = RBLambdaOf(out.n, out.bandWidth, out.eps);
+        out.workerThreads = RBWorkerThreads(params.multiThread, params.workerThreads);
 
         if (out.bandWidth == 0)
         {

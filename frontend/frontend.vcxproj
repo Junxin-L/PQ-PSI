@@ -86,11 +86,20 @@
     <ClCompile Include="pqpsi\\pqpsi.cpp" />
     <ClCompile Include="pqpsi\\protocols\\recv.cpp" />
     <ClCompile Include="pqpsi\\protocols\\send.cpp" />
+    <ClCompile Include="..\\thirdparty\\sneik\\sneik_f512.c" />
     <ClCompile Include="util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Keccak-f.h" />
-    <ClInclude Include="pqpsi\\pi.h" />
+    <ClInclude Include="..\\thirdparty\\sneik\\sneik_f512.h" />
+    <ClInclude Include="permutation\\api.h" />
+    <ClInclude Include="permutation\\cons.h" />
+    <ClInclude Include="permutation\\hctr2.h" />
+    <ClInclude Include="permutation\\params.h" />
+    <ClInclude Include="permutation\\permutation.h" />
+    <ClInclude Include="permutation\\small.h" />
+    <ClInclude Include="permutation\\sneik.h" />
+    <ClInclude Include="permutation\\types.h" />
     <ClInclude Include="pqpsi\\pqpsi.h" />
     <ClInclude Include="pqpsi\\protocols\\party.h" />
     <ClInclude Include="pqpsi\\protocols\\tools.h" />

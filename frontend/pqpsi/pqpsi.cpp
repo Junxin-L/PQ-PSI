@@ -21,7 +21,8 @@ void pqpsi(
 	std::vector<block> set,
 	const RbCfg* rb,
 	u64* hitOut,
-	PqPsiStageMs* msOut)
+	PqPsiStageMs* msOut,
+	const PiCfg* piCfg)
 {
 	(void)setSize;
 
@@ -33,6 +34,7 @@ void pqpsi(
 
 	PqPsiStageMs local{};
 	const auto all0 = Clock::now();
+	const auto setup0 = Clock::now();
 
 	const bool traceOn = []()
 	{
@@ -140,25 +142,35 @@ void pqpsi(
 	const u64 bandWidth = static_cast<u64>(rbInfo.bandWidth);
 	bool multiThread = true;
 	multiThread = rbCfg.multiThread;
+	const size_t workerThreads = rbInfo.workerThreads;
 
 	const u64 rowSize = KEM_key_block_size;
-	const size_t piStepBits = 1120;
-	const size_t piLambdaBits = 128;
-	Pi pi(Keccak_size_bit, KEM_key_size_bit, piStepBits, piLambdaBits);
+	PiCfg localPi{};
+	if (piCfg)
+	{
+		localPi = *piCfg;
+	}
+	const u8 ownParty = static_cast<u8>(me & 1U);
+	const u8 peerParty = static_cast<u8>(ownParty ^ 1U);
+	auto ownPi = makePi(localPi, ownParty);
+	auto peerPi = makePi(localPi, peerParty);
 
 	Ctx ctx{
 		tableSize,
 		bandWidth,
 		rowSize,
 		multiThread,
+		workerThreads,
 		rbCfg,
-		pi,
+		*ownPi,
+		*peerPi,
 		set,
 		chs,
 		simSend,
 		trace,
 		local
 	};
+	local.setupMs = ms(setup0, Clock::now());
 
 	if (me == 0)
 	{
@@ -169,6 +181,7 @@ void pqpsi(
 		Send(ctx);
 	}
 
+	const auto teardown0 = Clock::now();
 	for (u64 i = 0; i < nParties; ++i)
 	{
 		if (i == me) continue;
@@ -179,6 +192,7 @@ void pqpsi(
 		eps[i].stop();
 	}
 	ios.stop();
+	local.teardownMs = ms(teardown0, Clock::now());
 
 	local.totalMs = ms(all0, Clock::now());
 	if (msOut)

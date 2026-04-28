@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+export PATH="/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build-docker}"
 CONFIG_LOG="${CONFIG_LOG:-$REPO_ROOT/pqpsi-configure.log}"
@@ -20,6 +22,6 @@ docker run --rm --platform linux/amd64 \
         rm -rf ${CONTAINER_BUILD_DIR} && \
         bash /work/script/build-miracl-linux64.sh ${CONTAINER_MIRACL_ROOT} >/work/miracl-build.log 2>&1 && \
         cmake -S /work -B ${CONTAINER_BUILD_DIR} -DCMAKE_BUILD_TYPE=Release -DPQPSI_BUILD_RBOKVS_BENCH_ONLY=ON >${CONTAINER_CONFIG_LOG} 2>&1 && \
-        cmake --build ${CONTAINER_BUILD_DIR} --target pqpsi_rbokvs_bench rbokvs_g_check rbokvs_pqpsi_test pqpsi_tests --parallel 1 >${CONTAINER_BUILD_LOG} 2>&1"
+        cmake --build ${CONTAINER_BUILD_DIR} --target pqpsi_rbokvs_bench rbokvs_g_check rbokvs_pqpsi_test pqpsi_tests construction_permutation_bench --parallel 1 >${CONTAINER_BUILD_LOG} 2>&1"
 
-echo "Built pqpsi_rbokvs_bench, rbokvs_g_check, rbokvs_pqpsi_test, and pqpsi_tests into $BUILD_DIR"
+echo "Built pqpsi_rbokvs_bench, rbokvs_g_check, rbokvs_pqpsi_test, pqpsi_tests, and construction_permutation_bench into $BUILD_DIR"

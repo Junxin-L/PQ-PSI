@@ -21,7 +21,9 @@ namespace osuCrypto
         double eps = 0.0;
         size_t columns = 0;
         size_t bandWidth = 0;
+        bool check = true; // enforce the lambda-derived width bound
         bool multiThread = true;
+        size_t workerThreads = 4; // 0 means auto
         block startSeed = toBlock(0x9b3a7f21ULL, 0x6c8e1d44ULL);
         block maskSeed = toBlock(0x4f12c0deULL, 0xa55a91b7ULL);
     };
@@ -34,6 +36,7 @@ namespace osuCrypto
         double eps = 0.0;
         size_t columns = 0;
         size_t bandWidth = 0;
+        size_t workerThreads = 4;
     };
 
     struct RBRow
@@ -41,5 +44,12 @@ namespace osuCrypto
         size_t start = 0;
         RBBits bits{};
         std::vector<block> rhs;
+    };
+
+    struct RBFlatRow
+    {
+        size_t start = 0;
+        RBBits bits{};
+        size_t rhs = 0;
     };
 }

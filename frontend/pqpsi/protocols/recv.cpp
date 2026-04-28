@@ -9,40 +9,51 @@ namespace pqpsi_proto
 	void Recv(Ctx& ctx, u64* hitOut)
 	{
 		// step 1 keygen
-		std::vector<kemKey> sk(ctx.set.size());
+		const auto tPrep0 = std::chrono::steady_clock::now();
+		std::vector<RawKey> sk;
 		std::vector<kemKey> pk(ctx.set.size());
+		const auto tPrep1 = std::chrono::steady_clock::now();
+		ctx.ms.prepMs += std::chrono::duration<double, std::milli>(tPrep1 - tPrep0).count();
 		const auto tKey0 = std::chrono::steady_clock::now();
-		genKeys(sk, pk, ctx.multiThread);
+		genKeys(sk, pk, ctx.multiThread, ctx.workerThreads);
 		const auto tKey1 = std::chrono::steady_clock::now();
 		ctx.ms.kemKeyGenMs += std::chrono::duration<double, std::milli>(tKey1 - tKey0).count();
 		ctx.trace("genKeys done");
 
 		// local H x cache
 		std::vector<kemKey> masks;
-		precomputeMasks(ctx.set, masks, ctx.multiThread);
+		const auto tMask0 = std::chrono::steady_clock::now();
+		precomputeMasks(ctx.set, masks, ctx.multiThread, ctx.workerThreads);
+		const auto tMask1 = std::chrono::steady_clock::now();
+		ctx.ms.maskMs += std::chrono::duration<double, std::milli>(tMask1 - tMask0).count();
 		ctx.trace("receiver mask cache done");
 
 		// step 2 permute pk
 		// step 3 xor H x
-		std::vector<std::vector<block>> rows(pk.size());
+		const auto tPrep2 = std::chrono::steady_clock::now();
+		std::vector<block> rows(pk.size() * ctx.rowSize);
+		const auto tPrep3 = std::chrono::steady_clock::now();
+		ctx.ms.prepMs += std::chrono::duration<double, std::milli>(tPrep3 - tPrep2).count();
 		const auto tPerm0 = std::chrono::steady_clock::now();
-		parallelFor(rows.size(), 16, ctx.multiThread, [&](size_t begin, size_t end)
+		parallelFor(ctx.set.size(), 16, ctx.multiThread, ctx.workerThreads, [&](size_t begin, size_t end)
 		{
-			Bits bits;
-			bits.reserve(KEM_key_size_bit);
 			for (size_t i = begin; i < end; ++i)
 			{
-				permute(ctx.pi, pk[i], rows[i], bits);
-				xorMask(masks[i], rows[i]);
+				block* row = rowPtr(rows, ctx.rowSize, i);
+				permute(ctx.ownPi, pk[i], row);
+				xorMask(masks[i], row);
 			}
 		});
 		const auto tPerm1 = std::chrono::steady_clock::now();
 		ctx.ms.permuteMs += std::chrono::duration<double, std::milli>(tPerm1 - tPerm0).count();
 
 		// step 4 encode OKVS1
+		const auto tPrep4 = std::chrono::steady_clock::now();
 		std::vector<block> buf(ctx.tableSize * ctx.rowSize);
+		const auto tPrep5 = std::chrono::steady_clock::now();
+		ctx.ms.prepMs += std::chrono::duration<double, std::milli>(tPrep5 - tPrep4).count();
 		const auto tEnc0 = std::chrono::steady_clock::now();
-		RBEncode(ctx.set, rows, buf, ctx.rowSize, ctx.rb);
+		RBEncode(ctx.set, rows, ctx.rowSize, buf, ctx.rb);
 		const auto tEnc1 = std::chrono::steady_clock::now();
 		ctx.ms.okvsEncodeMs += std::chrono::duration<double, std::milli>(tEnc1 - tEnc0).count();
 		ctx.trace("receiver okvs1 encode done");
@@ -75,14 +86,13 @@ namespace pqpsi_proto
 		// step 8 xor H x
 		// step 9 Pi inverse
 		const auto tPerm2_0 = std::chrono::steady_clock::now();
-		parallelFor(rows.size(), 16, ctx.multiThread, [&](size_t begin, size_t end)
+		parallelFor(ctx.set.size(), 16, ctx.multiThread, ctx.workerThreads, [&](size_t begin, size_t end)
 		{
-			Bits bits;
-			bits.reserve(KEM_key_size_bit);
 			for (size_t i = begin; i < end; ++i)
 			{
-				xorMask(masks[i], rows[i]);
-				unpermute(ctx.pi, rows[i], bits);
+				block* row = rowPtr(rows, ctx.rowSize, i);
+				xorMask(masks[i], row);
+				unpermute(ctx.peerPi, row);
 			}
 		});
 		const auto tPerm2_1 = std::chrono::steady_clock::now();
@@ -90,7 +100,7 @@ namespace pqpsi_proto
 
 		// step 10 decaps
 		const auto tKem0 = std::chrono::steady_clock::now();
-		const u64 hits = countDecapHits(sk, rows, ctx.multiThread);
+		const u64 hits = countDecapHits(sk, rows, ctx.rowSize, ctx.multiThread, ctx.workerThreads);
 		const auto tKem1 = std::chrono::steady_clock::now();
 		ctx.ms.kemCoreMs += std::chrono::duration<double, std::milli>(tKem1 - tKem0).count();
 		ctx.trace("receiver decaps done");
