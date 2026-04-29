@@ -13,6 +13,14 @@ machine-readable benchmark logs. The goal is not to present a new VOLE-PSI
 protocol. The goal is to make the exact variant we benchmarked easy to inspect,
 rerun, and criticize.
 
+Upstream VOLE-PSI/libOTe already contains support for a Kyber-based base OT
+path. In our macOS Docker Desktop setup, however, that bundled Kyber backend
+triggered an illegal-instruction failure when run under the Linux Docker
+environment we were using for the comparison benchmarks. Rather than silently
+switch back to a non-post-quantum base OT, this fork keeps the libOTe
+`ENABLE_MR_KYBER` protocol path and replaces only the Kyber backend with a
+pinned pq-crystals Kyber implementation that runs in our Docker environment.
+
 What changed in this fork:
 
 * libOTe is configured with `ENABLE_MR_KYBER=ON`, `ENABLE_MRR=OFF`, and

@@ -11,6 +11,13 @@ changes are aimed at benchmarking and reproducibility: Dockerized Linux builds,
 scripted loopback experiments, structured benchmark output, and a pq-crystals
 Kyber backend for the libOTe Kyber OT path.
 
+This is not because upstream VOLE-PSI/libOTe lacks a Kyber OT path. It does have
+one. The change here was made because the bundled Kyber backend did not run in
+our macOS Docker Desktop Linux benchmarking environment due to an
+illegal-instruction failure. We therefore kept the libOTe `ENABLE_MR_KYBER`
+protocol path and substituted a pinned pq-crystals Kyber backend that runs in
+that environment.
+
 The modified build flow pins the relevant third-party code:
 
 * libOTe: https://github.com/osu-crypto/libOTe.git,
