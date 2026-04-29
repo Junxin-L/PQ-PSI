@@ -1,26 +1,39 @@
 # VOLE-PSI with pq-crystals Kyber OT
 
-This repository is a benchmarking-oriented fork of
-[VOLE-PSI](https://github.com/ladnir/volepsi). It keeps the original VOLE-PSI
-protocol code, but adds a Linux Docker workflow, loopback benchmark scripts, and
-a pq-crystals Kyber backend for libOTe's `ENABLE_MR_KYBER` base OT path.
+This is our experimental fork of
+[VOLE-PSI](https://github.com/ladnir/volepsi). We use it as a comparison point
+for PSI benchmarks where the base OT should be post-quantum, the build should be
+reproducible, and the benchmark environment should be explicit rather than
+hidden in someone's laptop setup.
 
-The main local changes are:
+The original VOLE-PSI project does the important protocol work. This fork is
+mostly the scaffolding we needed around it: a pq-crystals Kyber backend for the
+libOTe Kyber OT path, Docker builds, loopback network shaping, and
+machine-readable benchmark logs. The goal is not to present a new VOLE-PSI
+protocol. The goal is to make the exact variant we benchmarked easy to inspect,
+rerun, and criticize.
 
-* libOTe is built with `ENABLE_MR_KYBER=ON`, `ENABLE_MRR=OFF`, and
+What changed in this fork:
+
+* libOTe is configured with `ENABLE_MR_KYBER=ON`, `ENABLE_MRR=OFF`, and
   `NO_ARCH_NATIVE=ON`.
-* The Kyber OT backend is provided by the pq-crystals Kyber reference code,
-  pinned to commit `4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`, plus the adapter
-  in `thirdparty/kyberot-pqcrystals/`.
-* The TCP benchmark frontend accepts `-nt <threads>` in the `-net` path and
-  prints machine-readable timing and communication counters.
-* Docker scripts are provided for Linux-hosted Docker and macOS Docker Desktop
+* The Kyber OT backend is backed by the pq-crystals Kyber reference code,
+  pinned to commit `4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`.
+* The compatibility layer in `thirdparty/kyberot-pqcrystals/` implements the
+  `KyberOT` C API expected by libOTe's `ENABLE_MR_KYBER` code path, while
+  delegating Kyber key generation, encapsulation, and decapsulation to the
+  pinned pq-crystals Kyber source.
+* The TCP benchmark path accepts `-nt <threads>` and prints structured timing
+  and byte counters, which makes the scripts less fragile.
+* The Docker scripts support both native Linux Docker and macOS Docker Desktop
   running Linux containers.
 
-Unless stated otherwise, reported benchmark time is the online protocol time
-around `RsPsiSender::run` / `RsPsiReceiver::run`. It excludes local parameter
-initialization, input generation, socket setup, process startup, and Docker
-startup.
+One measurement detail is worth saying plainly: unless stated otherwise, the
+benchmark time reported by these scripts is the online protocol time around
+`RsPsiSender::run` / `RsPsiReceiver::run`. It does not include local parameter
+initialization, input generation, socket setup, process startup, or Docker
+startup. That is intentional, but it should be compared against other protocols
+using the same convention.
 
 ## Quick Start: Linux Docker
 
@@ -33,14 +46,13 @@ bash script/docker-unit-test.sh
 bash script/docker-psi-demo.sh 128 64
 ```
 
-The build script creates the Docker image `vole-psi-linux` by default. Override
-it with `IMAGE_NAME=<name>` if needed.
+The build script creates the Docker image `vole-psi-linux` by default. Use
+`IMAGE_NAME=<name>` if you want to keep multiple builds around.
 
 ## Quick Start: macOS with Linux Docker Containers
 
-On macOS, start Docker Desktop first. For Apple Silicon machines, use
-`linux/amd64` if you want the same Linux/amd64 environment used by our paper
-benchmarks:
+On macOS, start Docker Desktop first. If you are on Apple Silicon and want to
+match a Linux/amd64 comparison environment, set `DOCKER_PLATFORM=linux/amd64`:
 
 ```bash
 cd VOLE-PSI
@@ -49,16 +61,21 @@ DOCKER_PLATFORM=linux/amd64 bash script/docker-unit-test.sh
 DOCKER_PLATFORM=linux/amd64 bash script/docker-psi-demo.sh 128 64
 ```
 
-This runs Linux containers under Docker Desktop. On Apple Silicon, `linux/amd64`
-uses emulation, so absolute timings may differ from a native Linux/amd64 host.
-Use the same Docker platform for all compared protocols if the numbers will be
-reported together.
+This still runs Linux containers, just through Docker Desktop. On Apple Silicon,
+`linux/amd64` uses emulation, so the absolute runtime can differ from a native
+Linux/amd64 host. For a paper table, the important rule is consistency: compare
+protocols under the same Docker platform and the same network shaping setup.
 
 ## Loopback Benchmarks
 
-The main benchmark wrapper runs sender and receiver as two frontend processes
-inside a single Linux container. It can also shape loopback traffic with Linux
-`tc netem`; the script applies one-way delay as half of the requested RTT.
+The main benchmark wrapper starts one Linux container, then runs the sender and
+receiver as two frontend processes inside that container. This avoids comparing
+one protocol in a single container against another protocol across two separate
+containers.
+
+For simulated networks, the script uses Linux `tc netem` on loopback. If you set
+`RTT=80ms`, the script applies `40ms` one-way delay, because loopback traffic
+sees the delay in both directions.
 
 LAN-style 10 Gbit/s, single-thread:
 
@@ -87,20 +104,26 @@ RATE=200mbit RTT=80ms THREAD_MODE=multi THREADS=4 POWERS="7 8 9 10" WARMUPS=3 RO
   bash script/benchmark-docker-loopback-psi.sh results-200mbps-rtt80ms-multi4.md
 ```
 
-Useful environment variables:
+Useful knobs:
 
 * `POWERS`: set sizes as log2 values, for example `"7 8 9 10"`.
 * `THREAD_MODE`: `single` passes `-nt 1`; `multi` passes `-nt $THREADS`.
 * `THREADS`: thread count used when `THREAD_MODE=multi`.
 * `RATE`: loopback bandwidth cap passed to `tc netem`, for example `10gbit` or
   `200mbit`.
-* `RTT`: target round-trip delay; the script applies `RTT / 2` as one-way delay.
+* `RTT`: target round-trip delay. The script applies `RTT / 2` as one-way delay.
 * `DELAY`: one-way delay. Use either `RTT` or `DELAY`, not both.
 * `WARMUPS` / `ROUNDS`: warmup rounds dropped and measured rounds kept.
 * `DOCKER_PLATFORM`: optional Docker platform, for example `linux/amd64`.
 
 The report uses `max(sender_time_ms, receiver_time_ms)` as the round time and
 `sender bytes_sent + receiver bytes_sent` as total communication.
+
+## About The Original Project
+
+Everything below this point is the upstream VOLE-PSI README, kept here so that
+readers can still see the original project description and build notes. Our
+fork-specific notes are intentionally above this section.
 
 ## Upstream VOLE-PSI README
 
