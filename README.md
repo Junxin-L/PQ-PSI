@@ -16,8 +16,7 @@ rerun, and criticize.
 Upstream VOLE-PSI/libOTe already contains support for a Kyber-based base OT
 path. In our macOS Docker Desktop setup, however, that bundled Kyber backend
 triggered an illegal-instruction failure when run under the Linux Docker
-environment we were using for the comparison benchmarks. Rather than silently
-switch back to a non-post-quantum base OT, this fork keeps the libOTe
+environment we were using for the comparison benchmarks. This fork keeps the libOTe
 `ENABLE_MR_KYBER` protocol path and replaces only the Kyber backend with a
 pinned pq-crystals Kyber implementation that runs in our Docker environment.
 
