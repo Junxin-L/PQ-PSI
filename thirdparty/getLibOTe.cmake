@@ -3,9 +3,13 @@ set(USER_NAME           )
 set(TOKEN               )      
 set(GIT_REPOSITORY      "https://github.com/osu-crypto/libOTe.git")
 set(GIT_TAG             "d55867114c78272be7142bd67ebdcb346fec8621" )
+set(PQ_KYBER_REPOSITORY "https://github.com/pq-crystals/kyber.git")
+set(PQ_KYBER_TAG        "4768bd37c02f9c40a46cb49d4d1f4d5e612bb882")
 
 set(DEP_NAME            libOTe)          
 set(CLONE_DIR "${VOLE_PSI_THIRDPARTY_CLONE_DIR}/${DEP_NAME}")
+set(PQ_KYBER_CLONE_DIR "${VOLE_PSI_THIRDPARTY_CLONE_DIR}/pq-crystals-kyber")
+set(PQ_KYBER_ADAPTER_DIR "${CMAKE_CURRENT_LIST_DIR}/kyberot-pqcrystals")
 set(BUILD_DIR "${CLONE_DIR}/out/build/${VOLEPSI_CONFIG}")
 set(LOG_FILE  "${CMAKE_CURRENT_LIST_DIR}/log-${DEP_NAME}.txt")
 
@@ -22,14 +26,18 @@ if(NOT ${DEP_NAME}_FOUND OR LIBOTE_DEV)
     set(DOWNLOAD_CMD  ${GIT} clone --recursive ${GIT_REPOSITORY})
     set(CHECKOUT_CMD  ${GIT} checkout ${GIT_TAG})
     set(SUBMODULE_CMD   ${GIT} submodule update --recursive)
+    set(PQ_KYBER_DOWNLOAD_CMD ${GIT} clone ${PQ_KYBER_REPOSITORY} ${PQ_KYBER_CLONE_DIR})
+    set(PQ_KYBER_CHECKOUT_CMD ${GIT} checkout ${PQ_KYBER_TAG})
     set(CONFIGURE_CMD ${CMAKE_COMMAND} -S ${CLONE_DIR} -B ${BUILD_DIR} -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
                        -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH_STR}
                        -DNO_SYSTEM_PATH=${VOLE_PSI_NO_SYSTEM_PATH}
+                       -DNO_ARCH_NATIVE=ON
                        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} 
                        -DFETCH_AUTO=${FETCH_AUTO}
                        -DVERBOSE_FETCH=${VERBOSE_FETCH}
                        -DENABLE_CIRCUITS=ON
-                       -DENABLE_MRR=ON
+                       -DENABLE_MRR=OFF
+                       -DENABLE_MR_KYBER=ON
                        -DENABLE_IKNP=ON
                        -DENABLE_SOFTSPOKEN_OT=ON
                        -DENABLE_BITPOLYMUL=${VOLE_PSI_ENABLE_BITPOLYMUL}
@@ -59,6 +67,14 @@ if(NOT ${DEP_NAME}_FOUND OR LIBOTE_DEV)
 
     run(NAME "libOTe Checkout ${GIT_TAG} " CMD ${CHECKOUT_CMD}  WD ${CLONE_DIR})
     run(NAME "libOTe submodule"       CMD ${SUBMODULE_CMD} WD ${CLONE_DIR})
+    if(NOT EXISTS ${PQ_KYBER_CLONE_DIR})
+        run(NAME "Cloning ${PQ_KYBER_REPOSITORY}" CMD ${PQ_KYBER_DOWNLOAD_CMD} WD ${VOLE_PSI_THIRDPARTY_CLONE_DIR})
+    endif()
+    run(NAME "pq-crystals Kyber Checkout ${PQ_KYBER_TAG}" CMD ${PQ_KYBER_CHECKOUT_CMD} WD ${PQ_KYBER_CLONE_DIR})
+    file(REMOVE_RECURSE "${CLONE_DIR}/thirdparty/KyberOT")
+    file(MAKE_DIRECTORY "${CLONE_DIR}/thirdparty/KyberOT")
+    file(COPY "${PQ_KYBER_CLONE_DIR}/ref/" DESTINATION "${CLONE_DIR}/thirdparty/KyberOT")
+    file(COPY "${PQ_KYBER_ADAPTER_DIR}/" DESTINATION "${CLONE_DIR}/thirdparty/KyberOT")
     run(NAME "libOTe Configure"       CMD ${CONFIGURE_CMD} WD ${CLONE_DIR})
     run(NAME "libOTe Build"           CMD ${BUILD_CMD}     WD ${CLONE_DIR})
     run(NAME "libOTe Install"         CMD ${INSTALL_CMD}   WD ${CLONE_DIR})

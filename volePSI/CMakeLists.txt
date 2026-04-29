@@ -88,3 +88,10 @@ target_include_directories(volePSI PUBLIC
                     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
                     $<INSTALL_INTERFACE:include>) 
 
+# MR_KYBER in libOTe includes <KyberOT/KyberOT.h>, but that header is kept in
+# the libOTe clone tree rather than installed into the staged prefix.
+set(VOLE_PSI_LIBOTE_KYBEROT_INCLUDE "${VOLE_PSI_THIRDPARTY_CLONE_DIR}/libOTe/thirdparty")
+if(EXISTS "${VOLE_PSI_LIBOTE_KYBEROT_INCLUDE}/KyberOT/KyberOT.h")
+    target_include_directories(volePSI PUBLIC
+                        $<BUILD_INTERFACE:${VOLE_PSI_LIBOTE_KYBEROT_INCLUDE}>)
+endif()

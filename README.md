@@ -1,4 +1,108 @@
-# Vole-PSI
+# VOLE-PSI with pq-crystals Kyber OT
+
+This repository is a benchmarking-oriented fork of
+[VOLE-PSI](https://github.com/ladnir/volepsi). It keeps the original VOLE-PSI
+protocol code, but adds a Linux Docker workflow, loopback benchmark scripts, and
+a pq-crystals Kyber backend for libOTe's `ENABLE_MR_KYBER` base OT path.
+
+The main local changes are:
+
+* libOTe is built with `ENABLE_MR_KYBER=ON`, `ENABLE_MRR=OFF`, and
+  `NO_ARCH_NATIVE=ON`.
+* The Kyber OT backend is provided by the pq-crystals Kyber reference code,
+  pinned to commit `4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`, plus the adapter
+  in `thirdparty/kyberot-pqcrystals/`.
+* The TCP benchmark frontend accepts `-nt <threads>` in the `-net` path and
+  prints machine-readable timing and communication counters.
+* Docker scripts are provided for Linux-hosted Docker and macOS Docker Desktop
+  running Linux containers.
+
+Unless stated otherwise, reported benchmark time is the online protocol time
+around `RsPsiSender::run` / `RsPsiReceiver::run`. It excludes local parameter
+initialization, input generation, socket setup, process startup, and Docker
+startup.
+
+## Quick Start: Linux Docker
+
+On a Linux host with Docker installed:
+
+```bash
+cd VOLE-PSI
+bash script/docker-build.sh
+bash script/docker-unit-test.sh
+bash script/docker-psi-demo.sh 128 64
+```
+
+The build script creates the Docker image `vole-psi-linux` by default. Override
+it with `IMAGE_NAME=<name>` if needed.
+
+## Quick Start: macOS with Linux Docker Containers
+
+On macOS, start Docker Desktop first. For Apple Silicon machines, use
+`linux/amd64` if you want the same Linux/amd64 environment used by our paper
+benchmarks:
+
+```bash
+cd VOLE-PSI
+DOCKER_PLATFORM=linux/amd64 bash script/docker-build.sh
+DOCKER_PLATFORM=linux/amd64 bash script/docker-unit-test.sh
+DOCKER_PLATFORM=linux/amd64 bash script/docker-psi-demo.sh 128 64
+```
+
+This runs Linux containers under Docker Desktop. On Apple Silicon, `linux/amd64`
+uses emulation, so absolute timings may differ from a native Linux/amd64 host.
+Use the same Docker platform for all compared protocols if the numbers will be
+reported together.
+
+## Loopback Benchmarks
+
+The main benchmark wrapper runs sender and receiver as two frontend processes
+inside a single Linux container. It can also shape loopback traffic with Linux
+`tc netem`; the script applies one-way delay as half of the requested RTT.
+
+LAN-style 10 Gbit/s, single-thread:
+
+```bash
+cd VOLE-PSI
+RATE=10gbit THREAD_MODE=single POWERS="7 8 9 10" WARMUPS=3 ROUNDS=60 \
+  bash script/benchmark-docker-loopback-psi.sh results-10gbps-single.md
+```
+
+LAN-style 10 Gbit/s, four threads:
+
+```bash
+cd VOLE-PSI
+RATE=10gbit THREAD_MODE=multi THREADS=4 POWERS="7 8 9 10" WARMUPS=3 ROUNDS=60 \
+  bash script/benchmark-docker-loopback-psi.sh results-10gbps-multi4.md
+```
+
+WAN-style 200 Mbit/s with 80 ms RTT:
+
+```bash
+cd VOLE-PSI
+RATE=200mbit RTT=80ms THREAD_MODE=single POWERS="7 8 9 10" WARMUPS=3 ROUNDS=60 \
+  bash script/benchmark-docker-loopback-psi.sh results-200mbps-rtt80ms-single.md
+
+RATE=200mbit RTT=80ms THREAD_MODE=multi THREADS=4 POWERS="7 8 9 10" WARMUPS=3 ROUNDS=60 \
+  bash script/benchmark-docker-loopback-psi.sh results-200mbps-rtt80ms-multi4.md
+```
+
+Useful environment variables:
+
+* `POWERS`: set sizes as log2 values, for example `"7 8 9 10"`.
+* `THREAD_MODE`: `single` passes `-nt 1`; `multi` passes `-nt $THREADS`.
+* `THREADS`: thread count used when `THREAD_MODE=multi`.
+* `RATE`: loopback bandwidth cap passed to `tc netem`, for example `10gbit` or
+  `200mbit`.
+* `RTT`: target round-trip delay; the script applies `RTT / 2` as one-way delay.
+* `DELAY`: one-way delay. Use either `RTT` or `DELAY`, not both.
+* `WARMUPS` / `ROUNDS`: warmup rounds dropped and measured rounds kept.
+* `DOCKER_PLATFORM`: optional Docker platform, for example `linux/amd64`.
+
+The report uses `max(sender_time_ms, receiver_time_ms)` as the round time and
+`sender bytes_sent + receiver bytes_sent` as total communication.
+
+## Upstream VOLE-PSI README
 
 
 Vole-PSI implements the protocols described in [VOLE-PSI: Fast OPRF and Circuit-PSI from Vector-OLE](https://eprint.iacr.org/2021/266) and [Blazing Fast PSI from Improved OKVS and Subfield VOLE](misc/blazingFastPSI.pdf). The library implements standard [Private Set Intersection (PSI)](https://en.wikipedia.org/wiki/Private_set_intersection) along with a variant called Circuit PSI where the result is secret shared between the two parties.
@@ -72,4 +176,3 @@ If the dependency is installed to the system, then cmake should automatically fi
 ```
 python3 build.py -D CMAKE_PREFIX_PATH=install/prefix/path
 ```
-

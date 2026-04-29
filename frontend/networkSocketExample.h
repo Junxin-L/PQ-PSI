@@ -13,6 +13,7 @@ void networkSocketExampleRun(const oc::CLP& cmd)
 
         auto ns = cmd.getOr("senderSize", 100ull);
         auto nr = cmd.getOr("receiverSize", 100ull);
+        auto nt = cmd.getOr("nt", 1ull);
 
         // The statistical security parameter.
         auto ssp = cmd.getOr("ssp", 40ull);
@@ -104,7 +105,7 @@ void networkSocketExampleRun(const oc::CLP& cmd)
             // configure
             volePSI::RsPsiSender sender;
             sender.setMultType(type);
-            sender.init(ns, nr, ssp, oc::sysRandomSeed(), mal, 1, useReducedRounds);
+            sender.init(ns, nr, ssp, oc::sysRandomSeed(), mal, nt, useReducedRounds);
 
             std::cout << "sender start\n";
             auto start = std::chrono::system_clock::now();
@@ -113,7 +114,11 @@ void networkSocketExampleRun(const oc::CLP& cmd)
             macoro::sync_wait(sender.run(set, sock));
 
             auto done = std::chrono::system_clock::now();
-            std::cout << "sender done, " << std::chrono::duration_cast<std::chrono::microseconds>(done-start).count() <<"ms" << std::endl;
+            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(done - start).count();
+            std::cout << "result_role sender" << std::endl;
+            std::cout << "result_time_ms " << elapsedMs << std::endl;
+            std::cout << "result_bytes_sent " << sock.bytesSent() << std::endl;
+            std::cout << "result_bytes_received " << sock.bytesReceived() << std::endl;
         }
         else
         {
@@ -125,7 +130,7 @@ void networkSocketExampleRun(const oc::CLP& cmd)
             // Configure.
             volePSI::RsPsiReceiver recevier;
             recevier.setMultType(type);
-            recevier.init(ns, nr, ssp, oc::sysRandomSeed(), mal, 1, useReducedRounds);
+            recevier.init(ns, nr, ssp, oc::sysRandomSeed(), mal, nt, useReducedRounds);
 
             std::cout << "recver start\n";
             auto start = std::chrono::system_clock::now();
@@ -134,7 +139,11 @@ void networkSocketExampleRun(const oc::CLP& cmd)
             macoro::sync_wait(recevier.run(set, sock));
 
             auto done = std::chrono::system_clock::now();
-            std::cout << "sender done, " << std::chrono::duration_cast<std::chrono::microseconds>(done-start).count() <<"ms" << std::endl;
+            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(done - start).count();
+            std::cout << "result_role receiver" << std::endl;
+            std::cout << "result_time_ms " << elapsedMs << std::endl;
+            std::cout << "result_bytes_sent " << sock.bytesSent() << std::endl;
+            std::cout << "result_bytes_received " << sock.bytesReceived() << std::endl;
         }
 
     }
