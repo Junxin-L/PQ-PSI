@@ -1,20 +1,18 @@
 # VOLE-PSI with pq-crystals Kyber OT
 
 This is our experimental fork of
-[VOLE-PSI](https://github.com/ladnir/volepsi). We use it as a comparison point
+[VOLE-PSI](https://github.com/ladnir/volepsi). We use it as a comparison
 for PSI benchmarks where the base OT should be post-quantum.
 
 The original VOLE-PSI project does the important protocol work. This fork is
 mostly the scaffolding we needed around it: a pq-crystals Kyber backend for the
-libOTe Kyber OT path, Docker builds, loopback network shaping, and benchmark logs. The goal is not to present a new VOLE-PSI
-protocol. The goal is to make the exact variant we benchmarked easy to inspect.
+libOTe Kyber OT path, Docker builds, loopback network shaping, and benchmark logs. 
 
 Upstream VOLE-PSI/libOTe already contains support for a Kyber-based base OT
 path. In our macOS Docker Desktop setup, however, that bundled Kyber backend
 triggered an illegal-instruction failure when run under the Linux Docker
 environment we were using for the comparison benchmarks. This fork keeps the libOTe
-`ENABLE_MR_KYBER` protocol path and replaces only the Kyber backend with a
-pinned pq-crystals Kyber implementation that can run in our Docker environment.
+`ENABLE_MR_KYBER` protocol path and replaces only the Kyber backend with a pq-crystals Kyber implementation that can run in our Docker environment.
 
 In this fork:
 
@@ -26,19 +24,15 @@ In this fork:
   [`4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`](https://github.com/pq-crystals/kyber/tree/4768bd37c02f9c40a46cb49d4d1f4d5e612bb882).
 * The compatibility layer in `thirdparty/kyberot-pqcrystals/` implements the
   `KyberOT` C API expected by libOTe's `ENABLE_MR_KYBER` code path, while
-  delegating Kyber key generation, encapsulation, and decapsulation to the
-  pinned pq-crystals Kyber source.
-* The TCP benchmark path accepts `-nt <threads>` and prints structured timing
-  and byte counters, which makes the scripts less fragile.
-* The Docker scripts support both native Linux Docker and macOS Docker Desktop
-  running Linux containers.
+  delegating Kyber key generation, encapsulation, and decapsulation to pq-crystals Kyber.
+* The TCP benchmark path accepts `-nt <threads>` and prints structured timing and byte counters.
+* The Docker scripts support both native Linux Docker and macOS Docker Desktop running Linux containers.
 
-One measurement detail is worth saying plainly: unless stated otherwise, the
+Notice: The
 benchmark time reported by these scripts is the online protocol time around
 `RsPsiSender::run` / `RsPsiReceiver::run`. It does not include local parameter
 initialization, input generation, socket setup, process startup, or Docker
-startup. That is intentional, but it should be compared against other protocols
-using the same convention.
+startup. 
 
 ## Quick Start: Linux Docker
 
@@ -68,8 +62,7 @@ DOCKER_PLATFORM=linux/amd64 bash script/docker-psi-demo.sh 128 64
 
 This still runs Linux containers, just through Docker Desktop. On Apple Silicon,
 `linux/amd64` uses emulation, so the absolute runtime can differ from a native
-Linux/amd64 host. For a paper table, the important rule is consistency: compare
-protocols under the same Docker platform and the same network shaping setup.
+Linux/amd64 host. 
 
 ## Loopback Benchmarks
 
@@ -79,8 +72,7 @@ one protocol in a single container against another protocol across two separate
 containers.
 
 For simulated networks, the script uses Linux `tc netem` on loopback. If you set
-`RTT=80ms`, the script applies `40ms` one-way delay, because loopback traffic
-sees the delay in both directions.
+`RTT=80ms`, the script applies `40ms` one-way delay.
 
 LAN-style 10 Gbit/s, single-thread:
 
@@ -116,9 +108,8 @@ Useful knobs:
 * `THREADS`: thread count used when `THREAD_MODE=multi`.
 * `RATE`: loopback bandwidth cap passed to `tc netem`, for example `10gbit` or
   `200mbit`.
-* `RTT`: target round-trip delay. The script applies `RTT / 2` as one-way delay.
+* `RTT`: target round-trip delay. 
 * `DELAY`: one-way delay. Use either `RTT` or `DELAY`, not both.
-* `WARMUPS` / `ROUNDS`: warmup rounds dropped and measured rounds kept.
 * `DOCKER_PLATFORM`: optional Docker platform, for example `linux/amd64`.
 
 The report uses `max(sender_time_ms, receiver_time_ms)` as the round time and
@@ -126,9 +117,7 @@ The report uses `max(sender_time_ms, receiver_time_ms)` as the round time and
 
 ## About The Original Project
 
-Everything below this point is the upstream VOLE-PSI README, kept here so that
-readers can still see the original project description and build notes. Our
-fork-specific notes are intentionally above this section.
+Everything below this point is the upstream VOLE-PSI README.
 
 ## Upstream VOLE-PSI README
 
