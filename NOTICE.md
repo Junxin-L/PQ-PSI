@@ -23,7 +23,9 @@ The modified build flow pins the relevant third-party code:
 * libOTe: https://github.com/osu-crypto/libOTe.git,
   commit `d55867114c78272be7142bd67ebdcb346fec8621`
 * pq-crystals Kyber: https://github.com/pq-crystals/kyber.git,
-  commit `4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`
+  commit
+  `4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`
+  (https://github.com/pq-crystals/kyber/tree/4768bd37c02f9c40a46cb49d4d1f4d5e612bb882)
 
 The pq-crystals Kyber source is fetched at build time. The compatibility layer
 in `thirdparty/kyberot-pqcrystals/` implements the `KyberOT` C API expected by

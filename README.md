@@ -2,30 +2,28 @@
 
 This is our experimental fork of
 [VOLE-PSI](https://github.com/ladnir/volepsi). We use it as a comparison point
-for PSI benchmarks where the base OT should be post-quantum, the build should be
-reproducible, and the benchmark environment should be explicit rather than
-hidden in someone's laptop setup.
+for PSI benchmarks where the base OT should be post-quantum.
 
 The original VOLE-PSI project does the important protocol work. This fork is
 mostly the scaffolding we needed around it: a pq-crystals Kyber backend for the
-libOTe Kyber OT path, Docker builds, loopback network shaping, and
-machine-readable benchmark logs. The goal is not to present a new VOLE-PSI
-protocol. The goal is to make the exact variant we benchmarked easy to inspect,
-rerun, and criticize.
+libOTe Kyber OT path, Docker builds, loopback network shaping, and benchmark logs. The goal is not to present a new VOLE-PSI
+protocol. The goal is to make the exact variant we benchmarked easy to inspect.
 
 Upstream VOLE-PSI/libOTe already contains support for a Kyber-based base OT
 path. In our macOS Docker Desktop setup, however, that bundled Kyber backend
 triggered an illegal-instruction failure when run under the Linux Docker
 environment we were using for the comparison benchmarks. This fork keeps the libOTe
 `ENABLE_MR_KYBER` protocol path and replaces only the Kyber backend with a
-pinned pq-crystals Kyber implementation that runs in our Docker environment.
+pinned pq-crystals Kyber implementation that can run in our Docker environment.
 
-What changed in this fork:
+In this fork:
 
 * libOTe is configured with `ENABLE_MR_KYBER=ON`, `ENABLE_MRR=OFF`, and
   `NO_ARCH_NATIVE=ON`.
-* The Kyber OT backend is backed by the pq-crystals Kyber reference code,
-  pinned to commit `4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`.
+* The Kyber OT backend is backed by the
+  [pq-crystals Kyber reference implementation](https://github.com/pq-crystals/kyber),
+  pinned to commit
+  [`4768bd37c02f9c40a46cb49d4d1f4d5e612bb882`](https://github.com/pq-crystals/kyber/tree/4768bd37c02f9c40a46cb49d4d1f4d5e612bb882).
 * The compatibility layer in `thirdparty/kyberot-pqcrystals/` implements the
   `KyberOT` C API expected by libOTe's `ENABLE_MR_KYBER` code path, while
   delegating Kyber key generation, encapsulation, and decapsulation to the
