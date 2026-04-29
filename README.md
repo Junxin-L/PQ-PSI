@@ -4,11 +4,11 @@ This is our experimental fork of
 [VOLE-PSI](https://github.com/ladnir/volepsi). We use it as a comparison
 for PSI benchmarks where the base OT should be post-quantum.
 
-The original VOLE-PSI project does the important protocol work. This fork is
+The original VOLE-PSI project does the protocol work. This fork is
 mostly the scaffolding we needed around it: a pq-crystals Kyber backend for the
 libOTe Kyber OT path, Docker builds, loopback network shaping, and benchmark logs. 
 
-Upstream VOLE-PSI/libOTe already contains support for a Kyber-based base OT
+Upstream VOLE-PSI/libOTe already contains support for a Kyber base OT
 path. In our macOS Docker Desktop setup, however, that bundled Kyber backend
 triggered an illegal-instruction failure when run under the Linux Docker
 environment we were using for the comparison benchmarks. This fork keeps the libOTe
@@ -34,7 +34,7 @@ benchmark time reported by these scripts is the online protocol time around
 initialization, input generation, socket setup, process startup, or Docker
 startup. 
 
-## Quick Start: Linux Docker
+## Start: Linux Docker
 
 On a Linux host with Docker installed:
 
@@ -48,7 +48,7 @@ bash script/docker-psi-demo.sh 128 64
 The build script creates the Docker image `vole-psi-linux` by default. Use
 `IMAGE_NAME=<name>` if you want to keep multiple builds around.
 
-## Quick Start: macOS with Linux Docker Containers
+## Start: macOS with Linux Docker Containers
 
 On macOS, start Docker Desktop first. If you are on Apple Silicon and want to
 match a Linux/amd64 comparison environment, set `DOCKER_PLATFORM=linux/amd64`:
@@ -67,14 +67,12 @@ Linux/amd64 host.
 ## Loopback Benchmarks
 
 The main benchmark wrapper starts one Linux container, then runs the sender and
-receiver as two frontend processes inside that container. This avoids comparing
-one protocol in a single container against another protocol across two separate
+receiver as two frontend processes inside that container. 
 containers.
 
-For simulated networks, the script uses Linux `tc netem` on loopback. If you set
-`RTT=80ms`, the script applies `40ms` one-way delay.
+For simulated networks, the script uses Linux `tc netem` on loopback. 
 
-LAN-style 10 Gbit/s, single-thread:
+LAN 10 Gbit/s, single-thread:
 
 ```bash
 cd VOLE-PSI
@@ -82,7 +80,7 @@ RATE=10gbit THREAD_MODE=single POWERS="7 8 9 10" WARMUPS=3 ROUNDS=60 \
   bash script/benchmark-docker-loopback-psi.sh results-10gbps-single.md
 ```
 
-LAN-style 10 Gbit/s, four threads:
+LAN 10 Gbit/s, four threads:
 
 ```bash
 cd VOLE-PSI
@@ -90,7 +88,7 @@ RATE=10gbit THREAD_MODE=multi THREADS=4 POWERS="7 8 9 10" WARMUPS=3 ROUNDS=60 \
   bash script/benchmark-docker-loopback-psi.sh results-10gbps-multi4.md
 ```
 
-WAN-style 200 Mbit/s with 80 ms RTT:
+WAN 200 Mbit/s with 80 ms RTT:
 
 ```bash
 cd VOLE-PSI
@@ -117,7 +115,7 @@ The report uses `max(sender_time_ms, receiver_time_ms)` as the round time and
 
 ## About The Original Project
 
-Everything below this point is the upstream VOLE-PSI README.
+Everything below is the original VOLE-PSI README.
 
 ## Upstream VOLE-PSI README
 
