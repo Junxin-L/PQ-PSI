@@ -1,0 +1,9 @@
+.vs/
+.vscode/
+out/
+thirdparty/*
+!thirdparty/kyberot-pqcrystals/
+!thirdparty/kyberot-pqcrystals/**
+tests/cmakeTests/
+CMakeSettings.json
+~/
