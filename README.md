@@ -85,6 +85,9 @@ If Docker reports a Colima socket `EOF`, the active Docker context is pointing
 to a profile that is not running. Switch to the running profile, usually
 `colima` or `colima-x64`.
 
+CPU pinning is off by default for the Docker benchmark. If you turn it on with
+`PIN_CPUS=1`, make sure the selected CPU ranges exist in the Docker VM.
+
 ## Start: Linux
 
 Build:

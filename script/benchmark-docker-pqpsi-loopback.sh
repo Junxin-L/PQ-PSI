@@ -34,7 +34,7 @@ Defaults
   THREAD_MODE=multi
   THREADS=4
   CHANNELS=
-  PIN_CPUS=1
+  PIN_CPUS=0
   RECV_CPUS=0-3
   SEND_CPUS=4-7
   KEM=obf-mlkem
@@ -81,7 +81,7 @@ DELAY="${DELAY:-}"
 THREAD_MODE="${THREAD_MODE:-multi}"
 THREADS="${THREADS:-4}"
 CHANNELS="${CHANNELS:-}"
-PIN_CPUS="${PIN_CPUS:-1}"
+PIN_CPUS="${PIN_CPUS:-0}"
 RECV_CPUS="${RECV_CPUS:-0-3}"
 SEND_CPUS="${SEND_CPUS:-4-7}"
 APPEND_ROUNDS="${APPEND_ROUNDS:-0}"
@@ -491,11 +491,14 @@ if [[ "${PIN_CPUS}" == "1" || "${PIN_CPUS}" == "true" || "${PIN_CPUS}" == "on" |
     send_cmd=(taskset -c "${SEND_CPUS}" "\${send_cmd[@]}")
 fi
 recv_rc=0
-stdbuf -oL -eL "\${recv_cmd[@]}" >"\$recv_log" 2>&1 &
+timeout ${RUN_TIMEOUT} stdbuf -oL -eL "\${recv_cmd[@]}" >"\$recv_log" 2>&1 &
 recv_pid=\$!
 sleep 1
 sender_rc=0
 timeout ${RUN_TIMEOUT} stdbuf -oL -eL "\${send_cmd[@]}" >"\$sender_log" 2>&1 || sender_rc=\$?
+if [[ "\$sender_rc" != "0" ]]; then
+    kill "\$recv_pid" >/dev/null 2>&1 || true
+fi
 wait "\$recv_pid" || recv_rc=\$?
 printf 'sender_status %s\n' "\$sender_rc"
 printf 'receiver_status %s\n' "\$recv_rc"
