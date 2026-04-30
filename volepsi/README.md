@@ -7,8 +7,7 @@ of this wrapper.
 When used from this monorepo, this code lives under `volepsi/`. Run commands
 from that directory.
 
-This is our experimental fork of
-[VOLE-PSI](https://github.com/ladnir/volepsi). We use it as a comparison
+The modified VOLE-PSI fork is vendored under volepsi/ for comparison benchmarks. We use it as a comparison
 for PSI benchmarks where the base OT should be post-quantum.
 
 The original VOLE-PSI project does the protocol work. This fork is
