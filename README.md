@@ -3,7 +3,7 @@
 This repository contains two benchmark code paths:
 
 - `./` is the PQ-PSI implementation.
-- `volepsi/` is our Kyber/VOLE-PSI comparison fork.
+- `volepsi/` is our Kyber/VOLE-PSI comparison fork. See `volepsi/README.md` for its build, test, and benchmark commands.
 
 ## Requirements
 
