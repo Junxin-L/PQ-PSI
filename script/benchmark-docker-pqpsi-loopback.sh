@@ -63,7 +63,7 @@ OUTPUT_FILE="${1:-$BENCH_DIR/pqpsi-loopback-$(date +%Y%m%d-%H%M%S).md}"
 TERM_ONLY=0
 if [[ "$OUTPUT_FILE" == "-" || "$OUTPUT_FILE" == "stdout" || "$OUTPUT_FILE" == "terminal" ]]; then
     TERM_ONLY=1
-    OUTPUT_FILE="$(mktemp "${TMPDIR:-/tmp}/pqpsi-loopback-report.XXXXXX.md")"
+    OUTPUT_FILE="$(mktemp "${TMPDIR:-/tmp}/pqpsi-loopback-report.XXXXXX")"
 elif [[ "$OUTPUT_FILE" != */* ]]; then
     OUTPUT_FILE="$BENCH_DIR/$OUTPUT_FILE"
 fi
