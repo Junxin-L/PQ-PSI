@@ -1,6 +1,5 @@
 # PQ-PSI
 
-RB-OKVS based PSI prototype and benchmark code.
 
 ## Requirements
 
@@ -49,14 +48,13 @@ called by that wrapper or used for RB-OKVS tuning.
 | --- | --- |
 | `script/pqpsi.sh` | main test/build/bench entry |
 | `script/check-linux-pqpsi-deps.sh` | Linux dependency check |
-| `script/build-miracl-linux64.sh` | MIRACL build helper |
-| `script/build-docker-pqpsi-bench.sh` | Docker build helper |
-| `script/test-rbokvs-pqpsi.sh` | thread-mode smoke test helper |
-| `script/benchmark-docker-pqpsi-loopback.sh` | aligned two-process benchmark |
-| `script/benchmark-docker-pqpsi.sh` | compatibility wrapper for loopback benchmark |
-| `script/run-pqpsi-loopback-matrix.sh` | paper-style matrix runner |
-| `script/calibrate-rb-g.sh` | RB-OKVS `g(eps,n)` calibration |
-| `script/tune-rb-pqpsi.sh` | RB-OKVS parameter sweep |
+| `script/build-miracl-linux64.sh` | MIRACL build |
+| `script/build-docker-pqpsi-bench.sh` | Docker build |
+| `script/test-rbokvs-pqpsi.sh` | thread-mode test |
+| `script/benchmark-docker-pqpsi-loopback.sh` | two-process benchmark |
+| `script/benchmark-docker-pqpsi.sh` |  wrapper for benchmark |
+| `script/run-pqpsi-loopback-matrix.sh` | benchmark runner |
+
 
 ## macOS + Docker
 
@@ -161,17 +159,7 @@ Settings:
 | `PI`          | `hctr`             | permutation                                  |
 | `BOB_PI`      | `0`                | optimized protocol; set `1` for not optimized |
 
-For git, keep one canonical summary per run family. Do not commit raw logs,
-detail folders, or scratch matrix output.
 
-## Dependency Notes
-
-The maintained PQ-PSI path uses RB-OKVS only. RB-OKVS does not use `libOTe`
-directly; it uses `cryptoTools` for AES, PRNG, blocks, and channels.
-`cryptoTools` still links MIRACL.
-
-The old `libOTe`, `libPaXoS`, `libOPRF`, and `libPSI_Tests` trees are not part
-of this build.
 
 ## KEMs
 
