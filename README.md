@@ -67,6 +67,36 @@ bash script/pqpsi.sh test thread 128 127 5 --kem obf-mlkem --pi hctr --threads 4
 bash script/pqpsi.sh test process 128 5 --kem obf-mlkem --pi hctr --threads 4
 ```
 
+If Docker cannot connect to Colima and prints a socket error such as:
+
+```text
+error during connect: .../.colima/x64/docker.sock/_ping: EOF
+```
+
+check the active Docker context:
+
+```bash
+docker context ls
+colima status
+```
+
+If Colima is running under the default profile, use:
+
+```bash
+docker context use colima
+docker info
+```
+
+If the server architecture is `aarch64`, `cryptoTools` may fail during build
+on some machines. Use an x86_64 Colima profile instead:
+
+```bash
+colima start x64 --arch x86_64 --cpu 4 --memory 8
+docker context use colima-x64
+docker info | grep Architecture
+bash script/pqpsi.sh build
+```
+
 ## Native Linux
 
 Build:
