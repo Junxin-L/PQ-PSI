@@ -56,7 +56,7 @@ called by that wrapper or used for RB-OKVS tuning.
 | `script/run-pqpsi-loopback-matrix.sh` | benchmark runner |
 
 
-## macOS + Docker
+## Start: macOS + Docker
 
 Use this path on macOS. The built binaries are Linux amd64 binaries, so run
 them through the scripts.
@@ -82,7 +82,7 @@ If Docker reports a Colima socket `EOF`, the active Docker context is pointing
 to a profile that is not running. Switch to the running profile, usually
 `colima` or `colima-x64`.
 
-## Native Linux
+## Start: Linux
 
 Build:
 
