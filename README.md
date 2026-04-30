@@ -229,6 +229,9 @@ More details: `frontend/kem/README.md`.
 
 ## Permutations
 
+`ConsPi` is the new wide-block permutation construction proposed in our paper;
+the Keccak and SNEIK entries below are instantiations of it.
+
 | Name            | Notes                             |
 | --------------- | --------------------------------- |
 | `hctr`          | AES-128-HCTR2                     |
