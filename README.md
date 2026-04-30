@@ -67,6 +67,9 @@ bash script/pqpsi.sh test thread 128 127 5 --kem obf-mlkem --pi hctr --threads 4
 bash script/pqpsi.sh test process 128 5 --kem obf-mlkem --pi hctr --threads 4
 ```
 
+`build` writes most output to `miracl-build.log`, `pqpsi-configure.log`, and
+`pqpsi-build.log`; the terminal may stay quiet while Docker is compiling.
+
 ### Common macOS Docker issue
 
 Use an x86_64 Docker/Colima profile. ARM (`aarch64`) Colima can fail while
