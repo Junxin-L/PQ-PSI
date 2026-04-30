@@ -112,7 +112,7 @@ wrapper for the same harness as macOS.
 
 ## Test Modes
 
-Docker wrapper:
+**Docker wrapper:**
 
 ```bash
 bash script/pqpsi.sh test thread 128 127 5 --kem obf-mlkem --pi hctr --threads 4
@@ -120,7 +120,7 @@ bash script/pqpsi.sh test process 128 5 --kem obf-mlkem --pi hctr --threads 4
 bash script/pqpsi.sh test process 128 5 --kem eckem --pi xoodoo --threads 4
 ```
 
-Native Linux:
+**Native Linux thread-mode tests:**
 
 ```bash
 ./bin/pqpsi_tests pqpsi-rbokvs 128 1 5 43000 --kem obf-mlkem --pi hctr --threads 4
@@ -130,7 +130,7 @@ Native Linux:
 | Mode      | Meaning                                           |
 | --------- | ------------------------------------------------- |
 | `thread`  | one process; Alice and Bob are local threads      |
-| `process` | two party processes in one Linux Docker container |
+| `process` | **Docker wrapper**; two party processes in one Linux Docker container |
 
 Useful flags:
 
@@ -178,11 +178,16 @@ RATE=10gbit THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench lan-4thread.m
 The full default uses `SIZES="128 256 512 1024"`, `ROUNDS=60`, and
 `WARMUPS=3`, so it can run for a while with little terminal output.
 
-Native Linux two-process binary:
+Native Linux two-process binary, no Docker required:
 
 ```bash
-./bin/pqpsi_party_bench 0 128 43000 --kem obf-mlkem --pi hctr --threads 4
-./bin/pqpsi_party_bench 1 128 43000 --kem obf-mlkem --pi hctr --threads 4
+PORT=43000
+TAG=test-128
+./bin/pqpsi_party_bench 0 128 "$PORT" --tag "$TAG" --kem obf-mlkem --pi hctr --threads 4 --no-bob-pi &
+recv_pid=$!
+sleep 1
+./bin/pqpsi_party_bench 1 128 "$PORT" --tag "$TAG" --kem obf-mlkem --pi hctr --threads 4 --no-bob-pi
+wait "$recv_pid"
 ```
 
 Settings:
