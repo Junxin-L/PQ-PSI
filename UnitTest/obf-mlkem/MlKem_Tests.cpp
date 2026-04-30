@@ -1,14 +1,14 @@
 #include "MlKem_Tests.h"
 
 #include "../Common.h"
-#include "frontend/obf-mlkem/backend/MlKem.h"
+#include "frontend/kem/obf-mlkem/backend/MlKem.h"
 
 #include <algorithm>
 #include <array>
 
 using namespace osuCrypto;
 
-namespace tests_libOTe
+namespace tests_pqpsi
 {
 	namespace
 	{

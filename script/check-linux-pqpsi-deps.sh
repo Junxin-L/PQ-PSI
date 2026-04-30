@@ -7,6 +7,18 @@ if [[ "${1:-}" == "--install" ]]; then
     DO_INSTALL=1
 fi
 
+if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "== PQPSI Linux dependency check =="
+    echo
+    echo "This helper checks apt packages on native Linux."
+    echo "Current host: $(uname -s)"
+    echo
+    echo "On macOS, use:"
+    echo "  bash script/pqpsi.sh build"
+    echo "  bash script/pqpsi.sh test process 128 1"
+    exit 0
+fi
+
 need_cmds=(
     bash
     cmake
@@ -23,8 +35,6 @@ need_pkgs=(
     libboost-system-dev
     libboost-thread-dev
     libgmp-dev
-    libgf2x-dev
-    libntl-dev
     libsodium-dev
 )
 

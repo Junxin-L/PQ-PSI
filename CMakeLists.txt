@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project("libPSI")
+project("PQ-PSI")
 
 
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_HOME_DIRECTORY}/bin)
@@ -35,28 +35,12 @@ SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")
 #       Library/includes locations          #
 #############################################
 
-option(PQPSI_BUILD_RBOKVS_BENCH_ONLY "Build only the PQPSI RB-OKVS benchmark and its minimal dependencies." OFF)
-
-# default location for libOTe
-set(libOTe_Dirs "${CMAKE_SOURCE_DIR}/libOTe/")
-include_directories("${libOTe_Dirs}/libOTe/") 
-link_directories("${libOTe_Dirs}/lib/")
+option(PQPSI_BUILD_RBOKVS_BENCH_ONLY "Build only the PQ-PSI benchmark/test targets." OFF)
 
 # default location for miracl
 set(Miracl_Dirs "${CMAKE_SOURCE_DIR}/thirdparty/linux/miracl/")
 include_directories("${Miracl_Dirs}") 
 link_directories("${Miracl_Dirs}/miracl/source/")
-
-# default location for NTL
-set(NTL_Dirs "${CMAKE_SOURCE_DIR}/thirdparty/linux/ntl/")
-if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
-  include_directories("${NTL_Dirs}/include/")
-  link_directories("${NTL_Dirs}/src/")
-endif()
-
-set(libPaXoS_Dirs "${CMAKE_SOURCE_DIR}/libPaXoS/")
-include_directories("${libPaXoS_Dirs}/libPaXoS/")
-link_directories("${libPaXoS_Dirs}/")
 
 # default location for Boost
 set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/thirdparty/linux/boost/")
@@ -67,39 +51,6 @@ set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/thirdparty/linux/boost/")
 #############################################
 add_subdirectory(cryptoTools)
 include_directories(cryptoTools)
-
-#############################################
-#               Build libOTe                #
-#############################################
-if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
-  add_subdirectory(libOTe)
-  include_directories(libOTe)
-endif()
-
-
-#############################################
-#               Build libOPRF                 #
-#############################################
-if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
-  add_subdirectory(libOPRF)
-  include_directories(libOPRF)
-endif()
-
-#############################################
-#               Build libPaXoS              #
-#############################################
-if(NOT PQPSI_BUILD_RBOKVS_BENCH_ONLY)
-  add_subdirectory(libPaXoS)
-  include_directories(libPaXoS)
-endif()
-
-
-#############################################
-#           Build libPSI Tests              #
-#############################################
-#add_subdirectory(libPSI_Tests)
-#include_directories(libPSI_Tests)
-
 
 #############################################
 #              Build Frontend               #

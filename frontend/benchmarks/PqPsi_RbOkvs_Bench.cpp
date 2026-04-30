@@ -1,4 +1,5 @@
 #include "pqpsi/pqpsi.h"
+#include "pqpsi/model.h"
 
 #include <algorithm>
 #include <chrono>
@@ -50,6 +51,7 @@ namespace
 		std::string topology = "same-host";
 		std::string link = "N/A";
 		std::string note = "no WAN emulation";
+		std::string emu = "app";
 		std::string file;
 	};
 
@@ -63,6 +65,7 @@ namespace
 		NetMeta net;
 		RbCfg rb{};
 		PiCfg pi{};
+		KemCfg kem{};
 	};
 
 	struct PartySeries
@@ -516,7 +519,7 @@ namespace
 			<< "  This binary runs one set size and writes one markdown report\n"
 			<< "\n"
 			<< "Sweep many sizes\n"
-			<< "  Use script/benchmark-docker-pqpsi.sh for 2^7 to 2^10 summary output\n"
+			<< "  Use script/pqpsi.sh bench for 2^7 to 2^10 summary output\n"
 			<< "\n"
 			<< "Examples\n"
 			<< "  " << prog << " 512 1 5 43000\n"
@@ -526,6 +529,8 @@ namespace
 			<< "  " << prog << " 512 1 5 43000 --pi keccak800\n"
 			<< "  " << prog << " 512 1 5 43000 --pi sneik-f512\n"
 			<< "  " << prog << " 512 1 5 43000 --pi hctr\n"
+			<< "  " << prog << " 512 1 5 43000 --no-bob-pi\n"
+			<< "  " << prog << " 512 1 5 43000 --kem eckem\n"
 			<< "  " << prog << " 512 1 5 43000 --threads 4\n"
 			<< "  " << prog << " 512 1 5 43000 --single-thread\n";
 	}
@@ -540,6 +545,7 @@ namespace
 		args.net.topology = getenvOr("PQPSI_BENCH_TOPOLOGY", "same-host");
 		args.net.link = getenvOr("PQPSI_BENCH_LINK", "N/A");
 		args.net.note = getenvOr("PQPSI_BENCH_NET_NOTE", "no WAN emulation");
+		args.net.emu = getenvOr("PQPSI_NET_EMU", "app");
 		args.rb.lambda = parseU64(std::getenv("PQPSI_RB_LAMBDA"), args.rb.lambda);
 		args.rb.eps = parseDouble(std::getenv("PQPSI_RB_EPS"), args.rb.eps);
 		args.rb.columns = parseU64(std::getenv("PQPSI_RB_COLS"), args.rb.columns);
@@ -548,6 +554,15 @@ namespace
 		if (const char* piEnv = std::getenv("PQPSI_PI"))
 		{
 			setPi(args.pi, piEnv);
+		}
+		if (const char* bobPiEnv = std::getenv("PQPSI_BOB_PI"))
+		{
+			const std::string v(bobPiEnv);
+			args.pi.bobPi = !(v == "0" || v == "false" || v == "off" || v == "no");
+		}
+		if (const char* kemEnv = std::getenv("PQPSI_KEM"))
+		{
+			setKem(args.kem, kemEnv);
 		}
 		args.pi.lambda = parseU64(std::getenv("PQPSI_PI_LAMBDA"), args.pi.lambda);
 
@@ -627,6 +642,18 @@ namespace
 			{
 				args.pi.lambda = parseU64(argv[++i], args.pi.lambda);
 			}
+			else if (argEq(argv[i], "--no-bob-pi") || argEq(argv[i], "--bob-no-pi"))
+			{
+				args.pi.bobPi = false;
+			}
+			else if (argEq(argv[i], "--bob-pi"))
+			{
+				args.pi.bobPi = true;
+			}
+			else if (argEq(argv[i], "--kem") && i + 1 < argc)
+			{
+				setKem(args.kem, argv[++i]);
+			}
 			else if ((argEq(argv[i], "--threads") || argEq(argv[i], "--worker-threads")) && i + 1 < argc)
 			{
 				args.rb.workerThreads = parseU64(argv[++i], args.rb.workerThreads);
@@ -694,7 +721,7 @@ namespace
 			try
 			{
 				const auto t0 = std::chrono::steady_clock::now();
-				res.ok = rbRun(args.setSize, res.got, res.want, &args.rb, &res.prof, std::numeric_limits<u64>::max(), &args.pi);
+				res.ok = rbRun(args.setSize, res.got, res.want, &args.rb, &res.prof, std::numeric_limits<u64>::max(), &args.pi, &args.kem);
 				const auto t1 = std::chrono::steady_clock::now();
 				res.runUs = std::chrono::duration<double, std::micro>(t1 - t0).count();
 				return res;
@@ -807,9 +834,59 @@ namespace
 		const auto p1Tx = summarize(series.p1.txBytes);
 		const auto p1Rx = summarize(series.p1.rxBytes);
 		const double totalCommBytes = p0Tx.mean + p1Tx.mean;
+		std::vector<double> phase1AliceMs;
+		std::vector<double> phase2BobMs;
+		std::vector<double> phase3AliceMs;
+		std::vector<double> netDAMs;
+		std::vector<double> netDBMs;
+		std::vector<double> modelMs;
+		std::vector<double> modelGapMs;
+		phase1AliceMs.reserve(series.runUs.size());
+		phase2BobMs.reserve(series.runUs.size());
+		phase3AliceMs.reserve(series.runUs.size());
+		netDAMs.reserve(series.runUs.size());
+		netDBMs.reserve(series.runUs.size());
+		modelMs.reserve(series.runUs.size());
+		modelGapMs.reserve(series.runUs.size());
+		for (size_t i = 0; i < series.runUs.size(); ++i)
+		{
+			const double a1 = series.p0.prepMs[i]
+				+ series.p0.keyMs[i]
+				+ series.p0.maskMs[i]
+				+ series.p0.piMs[i]
+				+ series.p0.okEncMs[i];
+			const double b2 = series.p1.prepMs[i]
+				+ series.p1.maskMs[i]
+				+ series.p1.okDecMs[i]
+				+ series.p1.invMs[i]
+				+ series.p1.kemMs[i]
+				+ series.p1.piMs[i]
+				+ series.p1.okEncMs[i];
+			const double a3 = series.p0.okDecMs[i]
+				+ series.p0.invMs[i]
+				+ series.p0.kemMs[i];
+			const double da = pqpsiMsgMs(series.p0.txBytes[i], args.net.delayMs, args.net.bwMBps);
+			const double db = pqpsiMsgMs(series.p1.txBytes[i], args.net.delayMs, args.net.bwMBps);
+			const double model = a1 + da + b2 + db + a3;
+			const double wall = std::max(p0ProtocolTimes[i], p1ProtocolTimes[i]);
+			phase1AliceMs.push_back(a1);
+			phase2BobMs.push_back(b2);
+			phase3AliceMs.push_back(a3);
+			netDAMs.push_back(da);
+			netDBMs.push_back(db);
+			modelMs.push_back(model);
+			modelGapMs.push_back(wall - model);
+		}
+		const auto phase1Alice = summarize(phase1AliceMs);
+		const auto phase2Bob = summarize(phase2BobMs);
+		const auto phase3Alice = summarize(phase3AliceMs);
+		const auto netDA = summarize(netDAMs);
+		const auto netDB = summarize(netDBMs);
+		const auto model = summarize(modelMs);
+		const auto modelGap = summarize(modelGapMs);
 		const bool ok = (cnt.fail == 0 && cnt.mismatch == 0);
 		const auto rb = RbOkvsResolve(args.setSize, args.rb);
-		auto perm = makePi(args.pi);
+		auto perm = makePi(args.kem.kind == PsiKemKind::EcKem ? PiCfg{ pqperm::Kind::Xoodoo } : args.pi);
 
 		out << "# PQPSI RB-OKVS Benchmark\n\n";
 		out << std::fixed << std::setprecision(2);
@@ -828,15 +905,21 @@ namespace
 		out << "| rb_eps | " << rb.eps << " |\n";
 		out << "| rb_m | " << rb.columns << " |\n";
 		out << "| rb_w | " << rb.bandWidth << " |\n";
+		out << "| kem | " << name(args.kem.kind) << " |\n";
+		out << "| kem_row_bytes | " << kemRowBytes(args.kem) << " |\n";
 		out << "| pi | " << perm->name() << " |\n";
 		out << "| pi_detail | " << perm->detail() << " |\n";
 		out << "| pi_n | " << perm->n() << " |\n";
 		out << "| pi_s | " << perm->s() << " |\n";
 		out << "| pi_lambda | " << args.pi.lambda << " |\n";
 		out << "| pi_rounds | " << perm->rounds() << " |\n";
+		out << "| bob_pi | " << (args.pi.bobPi ? "on" : "off") << " |\n";
 		out << "| sim_net_delay_ms | " << args.net.delayMs << " |\n";
 		out << "| sim_net_bw_MBps | " << args.net.bwMBps << " |\n";
+		out << "| network_emulator | " << args.net.emu << " |\n";
 		out << "| protocol_runtime_mean_ms | " << protocol.mean << " |\n";
+		out << "| protocol_model_mean_ms | " << model.mean << " |\n";
+		out << "| wall_minus_model_mean_ms | " << modelGap.mean << " |\n";
 		out << "| protocol_runtime_median_ms | " << protocol.median << " |\n";
 		out << "| protocol_runtime_p95_ms | " << protocol.p95 << " |\n";
 		out << "| protocol_runtime_p99_ms | " << protocol.p99 << " |\n";
@@ -856,6 +939,32 @@ namespace
 		out << "| total_over_wire | " << (totalCommBytes / 1024.0) << " | - | " << (totalCommBytes / 1024.0) << " |\n";
 		out << "\n";
 
+		out << "## Protocol Model\n";
+		out << "This model follows the critical path: Alice phase 1, network transfer of `D_A`, Bob phase 2, network transfer of `D_B`, Alice phase 3. It intentionally excludes setup/teardown and does not add both parties' local clocks together.\n\n";
+		out << "| step | mean_ms |\n";
+		out << "|---|---:|\n";
+		out << "| phase1_alice_ms | " << phase1Alice.mean << " |\n";
+		out << "| net_DA_ms | " << netDA.mean << " |\n";
+		out << "| phase2_bob_ms | " << phase2Bob.mean << " |\n";
+		out << "| net_DB_ms | " << netDB.mean << " |\n";
+		out << "| phase3_alice_ms | " << phase3Alice.mean << " |\n";
+		out << "| protocol_model_ms | " << model.mean << " |\n";
+		out << "| wall_protocol_ms | " << protocol.mean << " |\n";
+		out << "| wall_minus_model_ms | " << modelGap.mean << " |\n";
+		out << "\n";
+
+		out << "```text\n";
+		out << "Alice / party0                         Bob / party1\n";
+		out << "phase1: keygen+mask+pi+enc  " << phase1Alice.mean << "\n";
+		out << "send D_A net                 " << netDA.mean << "  -> recv D_A\n";
+		out << "                                      phase2: dec+kem+pi+enc  " << phase2Bob.mean << "\n";
+		out << "recv D_B                         <- send D_B net              " << netDB.mean << "\n";
+		out << "phase3: dec+inv+decap       " << phase3Alice.mean << "\n";
+		out << "model_total                 " << model.mean << "\n";
+		out << "wall_protocol               " << protocol.mean << "\n";
+		out << "wall_minus_model            " << modelGap.mean << "\n";
+		out << "```\n\n";
+
 		out << "## Party Results\n";
 		writeParty(out, "party0", p0Protocol, p0Prep, p0Key, p0Mask, p0Pi, p0OkEnc, p0OkDec, p0Send, p0Recv, p0Kem, p0Inv);
 		writeParty(out, "party1", p1Protocol, p1Prep, p1Key, p1Mask, p1Pi, p1OkEnc, p1OkDec, p1Send, p1Recv, p1Kem, p1Inv);
@@ -872,14 +981,16 @@ namespace
 		out << "\n";
 
 		out << "## Per-Round Results\n";
-		out << "| round | protocol_runtime_ms | party0_protocol_ms | party1_protocol_ms | total_communication_kb |\n";
-		out << "|---:|---:|---:|---:|---:|\n";
+		out << "| round | protocol_runtime_ms | protocol_model_ms | wall_minus_model_ms | party0_protocol_ms | party1_protocol_ms | total_communication_kb |\n";
+		out << "|---:|---:|---:|---:|---:|---:|---:|\n";
 		for (size_t i = 0; i < series.runUs.size(); ++i)
 		{
 			const double p0Prot = p0ProtocolTimes[i];
 			const double p1Prot = p1ProtocolTimes[i];
 			out << "| " << (i + 1)
 				<< " | " << std::max(p0Prot, p1Prot)
+				<< " | " << modelMs[i]
+				<< " | " << modelGapMs[i]
 				<< " | " << p0Prot
 				<< " | " << p1Prot
 				<< " | " << ((series.p0.txBytes[i] + series.p1.txBytes[i]) / 1024.0)
@@ -910,7 +1021,7 @@ namespace
 		out << "| build_mode | debug |\n";
 #endif
 		out << "| parties | 2 |\n";
-		out << "| kem_mode | MlKem512 |\n";
+		out << "| kem_mode | " << name(args.kem.kind) << " |\n";
 		out << "| okvs_type | RB |\n";
 		out << "| protocol_variant | pqpsi default |\n";
 		out << "| rb_lambda | " << rb.lambda << " |\n";
@@ -931,6 +1042,7 @@ namespace
 		out << "| network_topology | " << args.net.topology << " |\n";
 		out << "| link_speed | " << args.net.link << " |\n";
 		out << "| network_note | " << args.net.note << " |\n";
+		out << "| network_emulator | " << args.net.emu << " |\n";
 		out << "| network_settings_file | " << (args.net.file.empty() ? "none" : args.net.file) << " |\n";
 		out << "| port_base_seed | " << args.portSeed << " |\n";
 		out << "| per_round_port_step | 64 |\n";

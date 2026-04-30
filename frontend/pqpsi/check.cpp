@@ -103,7 +103,8 @@ bool rbRun(
 	const RbCfg* rb,
 	PqPsiRunProfile* out,
 	u64 hitTarget,
-	const PiCfg* pi)
+	const PiCfg* pi,
+	const KemCfg* kem)
 {
 	if (n == 0)
 	{
@@ -139,12 +140,12 @@ bool rbRun(
 			if (i == 0)
 			{
 				u64 localHits = 0;
-				pqpsi(i, n, set0, rb, &localHits, &ms0, pi);
+				pqpsi(i, n, set0, rb, &localHits, &ms0, pi, kem);
 				hits.store(localHits, std::memory_order_relaxed);
 			}
 			else
 			{
-				pqpsi(i, n, set1, rb, nullptr, &ms1, pi);
+				pqpsi(i, n, set1, rb, nullptr, &ms1, pi, kem);
 			}
 		});
 	}

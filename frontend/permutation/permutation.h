@@ -2,6 +2,7 @@
 
 #include "cons.h"
 #include "hctr2.h"
+#include "xoodoo.h"
 
 #include <memory>
 #include <stdexcept>
@@ -13,6 +14,7 @@ namespace pqperm
 	{
 		ConsPi,
 		Hctr,
+		Xoodoo,
 	};
 
 	struct Cfg
@@ -30,6 +32,8 @@ namespace pqperm
 			return "conspi";
 		case Kind::Hctr:
 			return "hctr";
+		case Kind::Xoodoo:
+			return "xoodoo";
 		default:
 			return "unknown";
 		}
@@ -47,6 +51,11 @@ namespace pqperm
 			cfg.kind = Kind::Hctr;
 			return;
 		}
+		if (text == "xoodoo")
+		{
+			cfg.kind = Kind::Xoodoo;
+			return;
+		}
 
 		cfg.kind = Kind::ConsPi;
 		cfg.small = pi::parseKind(text);
@@ -60,6 +69,9 @@ namespace pqperm
 			return std::unique_ptr<Perm>(new ConsPi(pi::defaults(cfg.small, KEM_key_size_bit, cfg.lambda), party));
 		case Kind::Hctr:
 			return std::unique_ptr<Perm>(new Hctr(party));
+		case Kind::Xoodoo:
+			(void)party;
+			return std::unique_ptr<Perm>(new Xoodoo());
 		default:
 			throw std::invalid_argument("unknown PQ-PSI permutation");
 		}

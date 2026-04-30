@@ -1,6 +1,7 @@
 #include "frontend/pqpsi/pqpsi.h"
-#include "frontend/obf-mlkem/backend/MlKem.h"
-#include "frontend/obf-mlkem/codec/Kemeleon.h"
+#include "frontend/kem/eckem/eckem.h"
+#include "frontend/kem/obf-mlkem/backend/MlKem.h"
+#include "frontend/kem/obf-mlkem/codec/Kemeleon.h"
 
 #include <algorithm>
 #include <array>
@@ -99,6 +100,8 @@ namespace
         NetCfg net;
         RbCfg rb{};
         PiCfg pi{};
+        KemCfg kem{};
+        u64 channels = 0;
     };
 
     struct PqRow
@@ -134,11 +137,19 @@ namespace
                 setPi(args.pi, argv[++i]);
             else if (argEq(argv[i], "--pi-lambda") && i + 1 < argc)
                 args.pi.lambda = parseU64(argv[++i], args.pi.lambda);
+            else if (argEq(argv[i], "--no-bob-pi") || argEq(argv[i], "--bob-no-pi"))
+                args.pi.bobPi = false;
+            else if (argEq(argv[i], "--bob-pi"))
+                args.pi.bobPi = true;
+            else if (argEq(argv[i], "--kem") && i + 1 < argc)
+                setKem(args.kem, argv[++i]);
             else if ((argEq(argv[i], "--threads") || argEq(argv[i], "--worker-threads")) && i + 1 < argc)
             {
                 args.rb.workerThreads = parseU64(argv[++i], args.rb.workerThreads);
                 args.rb.multiThread = args.rb.workerThreads != 1;
             }
+            else if ((argEq(argv[i], "--channels") || argEq(argv[i], "--net-channels")) && i + 1 < argc)
+                args.channels = parseU64(argv[++i], args.channels);
             else if (argEq(argv[i], "--hits") && i + 1 < argc)
                 args.hits = parseU64(argv[++i], args.hits);
             else if (argEq(argv[i], "--misses") && i + 1 < argc)
@@ -170,10 +181,11 @@ namespace
         setEnv("PQPSI_TRACE", "0");
         setEnv("PQPSI_SIM_NET_DELAY_MS", fmt(args.net.delayMs, 3));
         setEnv("PQPSI_SIM_NET_BW_MBPS", fmt(args.net.bwMBps, 3));
+        setEnv("PQPSI_NET_CHANNELS", std::to_string(args.channels));
 
         PqRow row;
         const auto t0 = std::chrono::steady_clock::now();
-        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits, &args.pi);
+        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits, &args.pi, &args.kem);
         const auto t1 = std::chrono::steady_clock::now();
         row.runtimeMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
         row.commKB =
@@ -208,6 +220,9 @@ namespace
         }
 
         const auto rb = RbOkvsResolve(args.setSize, args.rb);
+        const u64 channels = args.rb.multiThread
+            ? std::max<u64>(1, std::min<u64>(args.channels == 0 ? rb.workerThreads : args.channels, rb.workerThreads))
+            : 1;
         std::cout
             << "pqpsi-rbokvs\n"
             << "set=" << args.setSize
@@ -216,7 +231,10 @@ namespace
             << " thread_mode=" << (args.rb.multiThread ? "multi" : "single")
             << " party_threads=2"
             << " worker_threads=" << rb.workerThreads
-            << " pi=" << makePi(args.pi)->name()
+            << " net_channels=" << channels
+            << " kem=" << name(args.kem.kind)
+            << " pi=" << makePi(args.kem.kind == PsiKemKind::EcKem ? PiCfg{ pqperm::Kind::Xoodoo } : args.pi)->name()
+            << " bob_pi=" << (args.pi.bobPi ? "on" : "off")
             << " status=" << (ok ? "ok" : "fail") << "\n"
             << "runtime_ms=" << fmt(meanOf(runMs))
             << " comm_kb=" << fmt(meanOf(commKB))
@@ -398,6 +416,177 @@ namespace
         return 0;
     }
 
+    int runEcKem()
+    {
+        EcKem kem;
+        const auto spec = EcKem::spec();
+        if (spec.pkBytes != 32 || spec.skBytes != 32 || spec.ctBytes != 48 || spec.ssBytes != 16)
+        {
+            throw std::runtime_error("eckem sizes changed unexpectedly");
+        }
+
+        std::array<u8, EcKem::KeySeedBytes> keySeed{};
+        std::array<u8, EcKem::KeySeedBytes> otherSeed{};
+        std::array<u8, EcKem::EncSeedBytes> encSeed{};
+        fillSeed(keySeed, 0x11);
+        fillSeed(otherSeed, 0x52);
+        fillSeed(encSeed, 0x93);
+
+        const auto pair = kem.keyGen(keySeed);
+        const auto other = kem.keyGen(otherSeed);
+        const auto enc = kem.encap(pair.pk, encSeed);
+
+        std::array<u8, EcKem::TagBytes> tag{};
+        if (!kem.decap(pair.sk, enc.ct, tag) || tag != enc.tag)
+        {
+            throw std::runtime_error("eckem decap failed");
+        }
+
+        if (kem.decap(other.sk, enc.ct, tag))
+        {
+            throw std::runtime_error("eckem accepted ciphertext under the wrong key");
+        }
+
+        auto bad = enc.ct;
+        bad[0] ^= 1;
+        if (kem.decap(pair.sk, bad, tag))
+        {
+            throw std::runtime_error("eckem accepted a corrupted ciphertext");
+        }
+
+        u64 bot = 0;
+        for (u64 t = 0; t < 256; ++t)
+        {
+            for (size_t i = 0; i < bad.size(); ++i)
+            {
+                bad[i] = static_cast<u8>(0xA7 + 31 * t + 17 * i);
+            }
+            bot += kem.decap(pair.sk, bad, tag) ? 0 : 1;
+        }
+        if (bot != 256)
+        {
+            throw std::runtime_error("eckem random ciphertext sparsity check failed");
+        }
+
+        std::cout
+            << "eckem\n"
+            << "status=ok\n"
+            << "pk_bytes=" << spec.pkBytes << "\n"
+            << "sk_bytes=" << spec.skBytes << "\n"
+            << "ct_bytes=" << spec.ctBytes << "\n"
+            << "ss_bytes=" << spec.ssBytes << "\n"
+            << "bot_checks=" << bot << "/256\n";
+        return 0;
+    }
+
+    int runEcKemBench(int argc, char** argv, int start)
+    {
+        const u64 n = argc > start ? parseU64(argv[start], 128) : 128;
+        const u64 rounds = argc > start + 1 ? parseU64(argv[start + 1], 20) : 20;
+
+        EcKem kem;
+        std::array<u8, EcKem::TagBytes> tag{};
+        volatile u64 checksum = 0;
+
+        auto makeKeySeed = [](u64 row, u64 round)
+        {
+            std::array<u8, EcKem::KeySeedBytes> seed{};
+            for (size_t i = 0; i < seed.size(); ++i)
+            {
+                seed[i] = static_cast<u8>(0x31 + row * 17 + round * 29 + i * 7);
+            }
+            return seed;
+        };
+
+        auto makeEncSeed = [](u64 row, u64 round)
+        {
+            std::array<u8, EcKem::EncSeedBytes> seed{};
+            for (size_t i = 0; i < seed.size(); ++i)
+            {
+                seed[i] = static_cast<u8>(0x83 + row * 19 + round * 23 + i * 11);
+            }
+            return seed;
+        };
+
+        auto ms = [](auto begin, auto end)
+        {
+            return std::chrono::duration<double, std::milli>(end - begin).count();
+        };
+
+        std::vector<EcKem::KeyPair> pairs(n);
+        std::vector<EcKem::Encap> encs(n);
+        std::vector<double> seededKeyMs;
+        std::vector<double> seededEncMs;
+        std::vector<double> decMs;
+        std::vector<double> randomKeyMs;
+        std::vector<double> randomEncMs;
+        seededKeyMs.reserve(rounds);
+        seededEncMs.reserve(rounds);
+        decMs.reserve(rounds);
+        randomKeyMs.reserve(rounds);
+        randomEncMs.reserve(rounds);
+
+        for (u64 r = 0; r < rounds; ++r)
+        {
+            auto t0 = std::chrono::steady_clock::now();
+            for (u64 i = 0; i < n; ++i)
+            {
+                pairs[i] = kem.keyGen(makeKeySeed(i, r));
+                checksum += pairs[i].pk[0];
+            }
+            auto t1 = std::chrono::steady_clock::now();
+            seededKeyMs.push_back(ms(t0, t1));
+
+            for (u64 i = 0; i < n; ++i)
+            {
+                encs[i] = kem.encap(pairs[i].pk, makeEncSeed(i, r));
+                checksum += encs[i].ct[0];
+            }
+            auto t2 = std::chrono::steady_clock::now();
+            seededEncMs.push_back(ms(t1, t2));
+
+            for (u64 i = 0; i < n; ++i)
+            {
+                if (!kem.decap(pairs[i].sk, encs[i].ct, tag) || tag != encs[i].tag)
+                {
+                    throw std::runtime_error("eckem-bench decap failed");
+                }
+                checksum += tag[0];
+            }
+            auto t3 = std::chrono::steady_clock::now();
+            decMs.push_back(ms(t2, t3));
+
+            for (u64 i = 0; i < n; ++i)
+            {
+                pairs[i] = kem.keyGen();
+                checksum += pairs[i].pk[0];
+            }
+            auto t4 = std::chrono::steady_clock::now();
+            randomKeyMs.push_back(ms(t3, t4));
+
+            for (u64 i = 0; i < n; ++i)
+            {
+                encs[i] = kem.encap(pairs[i].pk);
+                checksum += encs[i].ct[0];
+            }
+            auto t5 = std::chrono::steady_clock::now();
+            randomEncMs.push_back(ms(t4, t5));
+        }
+
+        std::cout
+            << "eckem-bench\n"
+            << "status=ok\n"
+            << "n=" << n << "\n"
+            << "rounds=" << rounds << "\n"
+            << "seeded_keygen_ms=" << fmt(meanOf(seededKeyMs)) << "\n"
+            << "seeded_encap_ms=" << fmt(meanOf(seededEncMs)) << "\n"
+            << "decap_ms=" << fmt(meanOf(decMs)) << "\n"
+            << "random_keygen_ms=" << fmt(meanOf(randomKeyMs)) << "\n"
+            << "random_encap_ms=" << fmt(meanOf(randomEncMs)) << "\n"
+            << "checksum=" << checksum << "\n";
+        return 0;
+    }
+
     int runHctr2()
     {
         struct Vec
@@ -517,15 +706,51 @@ namespace
         return 0;
     }
 
+    int runXoodoo()
+    {
+        pqperm::Xoodoo pi;
+        for (u64 t = 0; t < 1024; ++t)
+        {
+            std::array<u8, pqperm::Xoodoo::Bytes> row{};
+            for (size_t i = 0; i < row.size(); ++i)
+            {
+                row[i] = static_cast<u8>(0x41 + 19 * i + t);
+            }
+
+            const auto want = row;
+            pi.encryptBytes(row.data(), row.size());
+            pi.decryptBytes(row.data(), row.size());
+            if (row != want)
+            {
+                throw std::runtime_error("Xoodoo inverse roundtrip failed");
+            }
+        }
+
+        std::cout
+            << "xoodoo\n"
+            << "status=ok\n"
+            << "roundtrip=1024\n"
+            << "bytes=" << pqperm::Xoodoo::Bytes << "\n"
+            << "rounds=" << pqperm::Xoodoo::Rounds << "\n";
+        return 0;
+    }
+
     void usage(const char* prog)
     {
         std::cout
             << "Usage\n"
-            << "  " << prog << " pqpsi-rbokvs [setSize] [warmups] [rounds] [portBase] [--hits v] [--rb-eps v] [--rb-w v] [--rb-cols v] [--rb-lambda v] [--pi conspi|hctr|keccak800|keccak1600|sneik-f512] [--threads v] [--single-thread|--multi-thread]\n"
+            << "  " << prog << " pqpsi-rbokvs [setSize] [warmups] [rounds] [portBase] [--hits v] [--rb-eps v] [--rb-w v] [--rb-cols v] [--rb-lambda v] [--kem obf-mlkem|eckem] [--pi conspi|hctr|xoodoo|keccak800|keccak1600|keccak1600-12|sneik-f512] [--no-bob-pi] [--threads v] [--channels v] [--single-thread|--multi-thread]\n"
             << "  " << prog << " rbokvs [setSize] [eps] [w] [rounds] [--threads v] [--single-thread|--multi-thread]\n"
             << "  " << prog << " hctr2\n"
             << "  " << prog << " sneik\n"
-            << "  " << prog << " kemeleon\n";
+            << "  " << prog << " xoodoo\n"
+            << "  " << prog << " eckem\n"
+            << "  " << prog << " eckem-bench [n] [rounds]\n"
+            << "  " << prog << " kemeleon\n"
+            << "\n"
+            << "Notes\n"
+            << "  pqpsi-rbokvs is the in-process/thread protocol test.\n"
+            << "  For the two-process loopback test, use: bash script/pqpsi.sh test process ...\n";
     }
 }
 
@@ -547,6 +772,12 @@ int main(int argc, char** argv)
             return runHctr2();
         if (argEq(argv[1], "sneik") || argEq(argv[1], "sneik-f512"))
             return runSneik();
+        if (argEq(argv[1], "xoodoo"))
+            return runXoodoo();
+        if (argEq(argv[1], "eckem"))
+            return runEcKem();
+        if (argEq(argv[1], "eckem-bench"))
+            return runEcKemBench(argc, argv, 2);
         if (argEq(argv[1], "kemeleon"))
             return runKemeleon();
 

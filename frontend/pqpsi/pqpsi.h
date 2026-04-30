@@ -45,7 +45,70 @@ struct PiCfg
 	pqperm::Kind kind = pqperm::Kind::ConsPi;
 	pi::Kind small = pi::Kind::Keccak1600;
 	size_t lambda = 128;
+	bool bobPi = false;
 };
+
+enum class PsiKemKind : u8
+{
+	ObfMlKem,
+	EcKem
+};
+
+struct KemCfg
+{
+	PsiKemKind kind = PsiKemKind::ObfMlKem;
+};
+
+inline const char* name(PsiKemKind kind)
+{
+	switch (kind)
+	{
+	case PsiKemKind::ObfMlKem:
+		return "obf-mlkem";
+	case PsiKemKind::EcKem:
+		return "eckem";
+	default:
+		return "unknown";
+	}
+}
+
+inline void setKem(KemCfg& kem, const std::string& text)
+{
+	if (text == "obf-mlkem" || text == "mlkem" || text == "kemeleon")
+	{
+		kem.kind = PsiKemKind::ObfMlKem;
+		return;
+	}
+	if (text == "eckem" || text == "ec-kem")
+	{
+		kem.kind = PsiKemKind::EcKem;
+		return;
+	}
+	throw std::invalid_argument("unknown PQ-PSI KEM: " + text);
+}
+
+inline size_t kemRowBytes(const KemCfg& kem)
+{
+	switch (kem.kind)
+	{
+	case PsiKemKind::ObfMlKem:
+		return KEM_key_size_bit / 8;
+	case PsiKemKind::EcKem:
+		return 48;
+	default:
+		throw std::invalid_argument("unknown PQ-PSI KEM row size");
+	}
+}
+
+inline size_t kemRowBlocks(const KemCfg& kem)
+{
+	const size_t bytes = kemRowBytes(kem);
+	if ((bytes % sizeof(block)) != 0)
+	{
+		throw std::invalid_argument("PQ-PSI KEM row must be block aligned");
+	}
+	return bytes / sizeof(block);
+}
 
 inline pqperm::Cfg toPermCfg(const PiCfg& pi)
 {
@@ -77,7 +140,8 @@ void pqpsi(
 	const RbCfg* rb = nullptr,
 	u64* hitOut = nullptr,
 	PqPsiStageMs* msOut = nullptr,
-	const PiCfg* pi = nullptr);
+	const PiCfg* pi = nullptr,
+	const KemCfg* kem = nullptr);
 
 void psiMain();
 void rbMain();
@@ -89,4 +153,5 @@ bool rbRun(
 	const RbCfg* rb = nullptr,
 	PqPsiRunProfile* out = nullptr,
 	u64 hitTarget = std::numeric_limits<u64>::max(),
-	const PiCfg* pi = nullptr);
+	const PiCfg* pi = nullptr,
+	const KemCfg* kem = nullptr);

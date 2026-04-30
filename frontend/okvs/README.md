@@ -129,7 +129,7 @@ Paper-fit values used for larger sizes:
 Examples:
 
 ```bash
-SIZES="512" RB_LAMBDA=40 RB_EPS=0.10 RB_W=176 bash script/benchmark-docker-pqpsi.sh
-SIZES="256" RB_LAMBDA=40 RB_EPS=0.07 RB_W=208 bash script/benchmark-docker-pqpsi.sh
+SIZES="512" RB_LAMBDA=40 RB_EPS=0.10 RB_W=176 bash script/pqpsi.sh bench
+SIZES="256" RB_LAMBDA=40 RB_EPS=0.07 RB_W=208 bash script/pqpsi.sh bench
 WARMUPS=1 ROUNDS=5 bash script/tune-rb-pqpsi.sh build-docker/benchmarks/rbokvs-pqpsi/rb-tune-summary.md
 ```

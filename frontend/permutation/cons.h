@@ -117,6 +117,11 @@ public:
 		return small_->label();
 	}
 
+	size_t smallRounds() const
+	{
+		return small_->rounds();
+	}
+
 	size_t n() const override
 	{
 		return params_.n;
@@ -393,7 +398,11 @@ using ConstructionPermutation = ConsPi;
 
 inline int piTest()
 {
-	const std::array<pi::Kind, 2> kinds{pi::Kind::Keccak800, pi::Kind::Keccak1600};
+	const std::array<pi::Kind, 3> kinds{
+		pi::Kind::Keccak800,
+		pi::Kind::Keccak1600,
+		pi::Kind::Keccak1600R12
+	};
 	std::mt19937_64 rng(0xC001D00DuLL);
 
 	for (auto kind : kinds)

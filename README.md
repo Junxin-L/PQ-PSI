@@ -1,55 +1,215 @@
-#  Post-Quantum Private Set Intersection for Small Sets
+# PQ-PSI
 
-NOTE: the current code is under maintenance to integrate the stand-alone OKVS libs. However, you can still use it to evualate our protocols. 
+RB-OKVS based PSI prototype and benchmark code.
 
-## Installations
-### Clone project
+## Requirements
+
+Baseline:
+
+| Item              | Version / note                                     |
+| ----------------- | -------------------------------------------------- |
+| OS                | Ubuntu 22.04, or macOS with Docker Desktop         |
+| CPU               | x86_64 with AES-NI, PCLMUL, SSE2, SSE4.1           |
+| Compiler          | C++14 compiler; tested with GCC on Ubuntu 22.04    |
+| CMake             | `>= 3.10`                                          |
+| Shell tools       | `bash`, `git`, `make`, `awk`, `python3`            |
+| Docker path       | Docker Desktop on macOS, or Docker Engine on Linux |
+| Network emulation | Linux `tc`; Docker runs need `--cap-add NET_ADMIN` |
+
+
+Ubuntu packages:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  build-essential cmake git python3 \
+  iproute2 util-linux \
+  libboost-system-dev libboost-thread-dev \
+  libgmp-dev libsodium-dev
 ```
-git clone --recursive git@github.com:asu-crypto/mPSI.git
+
+## Layout
+
+| Path                    | Notes                  |
+| ----------------------- | ---------------------- |
+| `frontend/pqpsi/`       | protocol code          |
+| `frontend/okvs/`        | RB-OKVS                |
+| `frontend/kem/`         | KEM choices            |
+| `frontend/permutation/` | big permutations       |
+| `tests/pqpsi_tests.cpp` | command-line tests     |
+| `frontend/benchmarks/`  | two-process benchmarks |
+| `script/pqpsi.sh`       | main wrapper           |
+
+## Scripts
+
+Use `script/pqpsi.sh` first. The other scripts are kept because they are either
+called by that wrapper or used for RB-OKVS tuning.
+
+| Script | Use |
+| --- | --- |
+| `script/pqpsi.sh` | main test/build/bench entry |
+| `script/check-linux-pqpsi-deps.sh` | Linux dependency check |
+| `script/build-miracl-linux64.sh` | MIRACL build helper |
+| `script/build-docker-pqpsi-bench.sh` | Docker build helper |
+| `script/test-rbokvs-pqpsi.sh` | thread-mode smoke test helper |
+| `script/benchmark-docker-pqpsi-loopback.sh` | aligned two-process benchmark |
+| `script/benchmark-docker-pqpsi.sh` | compatibility wrapper for loopback benchmark |
+| `script/run-pqpsi-loopback-matrix.sh` | paper-style matrix runner |
+| `script/calibrate-rb-g.sh` | RB-OKVS `g(eps,n)` calibration |
+| `script/tune-rb-pqpsi.sh` | RB-OKVS parameter sweep |
+
+## macOS + Docker
+
+Use this path on macOS. The built binaries are Linux amd64 binaries, so run
+them through the scripts.
+
+```bash
+bash script/pqpsi.sh build
+bash script/pqpsi.sh test thread 128 127 5 --kem obf-mlkem --pi hctr --threads 4
+bash script/pqpsi.sh test process 128 5 --kem obf-mlkem --pi hctr --threads 4
 ```
 
-### Quick Installation (Linux)
-    $ cd mPSI/thirdparty
-    $ bash all_linux.get
+## Native Linux
 
+Build:
 
+```bash
+bash script/build-miracl-linux64.sh thirdparty/linux/miracl/miracl
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPQPSI_BUILD_RBOKVS_BENCH_ONLY=ON
+cmake --build build --target pqpsi_party_bench pqpsi_rbokvs_bench rbokvs_g_check rbokvs_pqpsi_test pqpsi_tests -j"$(nproc)"
+```
 
-## Installations
+Run tests:
 
-### Required libraries
- C++ compiler with C++14 support. There are several library dependencies including [`Boost`](https://sourceforge.net/projects/boost/), [`Miracl`](https://github.com/miracl/MIRACL), [`NTL`](http://www.shoup.net/ntl/) , [`libOTe`](https://github.com/osu-crypto/libOTe), and  [`libPaXoS`](https://github.com/asu-crypto/mPSI/tree/paxos/libPaXoS). For `libOTe`, it requires CPU supporting `PCLMUL`, `AES-NI`, and `SSE4.1`. Optional: `nasm` for improved SHA1 performance.   Our code has been tested on both Windows (Microsoft Visual Studio) and Linux. To install the required libraries: 
-  * windows: open PowerShell,  `cd ./thirdparty`, and `.\all_win.ps1` 
-  * linux: `cd ./thirdparty`, and `bash .\all_linux.get`.   
+```bash
+./bin/pqpsi_tests kemeleon
+./bin/pqpsi_tests eckem
+./bin/pqpsi_tests rbokvs 128 0.12 64 20
+./bin/pqpsi_tests pqpsi-rbokvs 128 1 5 43000 --kem obf-mlkem --pi hctr --threads 4
+```
 
-NOTE: If you meet problem with `all_win.ps1` or `all_linux.get` which builds boost, miracl and libOTe, please follow the more manual instructions at [`libOTe`](https://github.com/osu-crypto/libOTe). For libPaXoS, please follow the more manual instructions at [`libPaXoS`](https://github.com/asu-crypto/mPSI/tree/paxos/libPaXoS)
+For two-process Linux runs, use the benchmark binary directly or use the Docker
+wrapper for the same harness as macOS.
 
-### Building the Project
-After cloning project from git,
-##### Windows:
-1. build cryptoTools,libOTe, and libOPRF projects in order.
-2. add argument for bOPRFmain project (for example: -u)
-3. run bOPRFmain project
- 
-##### Linux:
-1. make (requirements: `CMake`, `Make`, `g++` or similar)
-2. for test:
-	./bin/frontend.exe -u
+## Test Modes
 
+Docker wrapper:
 
-## Running the code
-The database is generated randomly. The outputs include the average online/offline/total runtime that displayed on the screen and output.txt. 
-#### Flags:
-    -u		unit test
+```bash
+bash script/pqpsi.sh test thread 128 127 5 --kem obf-mlkem --pi hctr --threads 4
+bash script/pqpsi.sh test process 128 5 --kem obf-mlkem --pi hctr --threads 4
+bash script/pqpsi.sh test process 128 5 --kem eckem --pi xoodoo --threads 4
+```
 
-[more]
-	
-#### Examples: 
-##### 1. Unit test:
-	./bin/frontend.exe -u
-	
-##### 2. PQ-PSI:
-	
-		
-	
-## Help
-For any questions on building or running the library, please contact Ofri Nevo `ofrine at gmail dot com` or Ni Trieu `nitrieu at asu dot edu`
+Native Linux:
+
+```bash
+./bin/pqpsi_tests pqpsi-rbokvs 128 1 5 43000 --kem obf-mlkem --pi hctr --threads 4
+./bin/pqpsi_tests pqpsi-rbokvs 128 1 5 43000 --kem eckem --pi xoodoo --threads 4
+```
+
+| Mode      | Meaning                                           |
+| --------- | ------------------------------------------------- |
+| `thread`  | one process; Alice and Bob are local threads      |
+| `process` | two party processes in one Linux Docker container |
+
+Useful flags:
+
+| Flag | Default | Notes |
+| --- | --- | --- |
+| `--kem obf-mlkem\|eckem` | `obf-mlkem` | KEM choice |
+| `--pi hctr\|keccak1600\|keccak1600-12\|keccak800\|sneik-f512\|xoodoo` | `hctr` | permutation choice |
+| `--bob-pi` | off | non-optimized protocol; enable Bob's second permutation |
+| `--no-bob-pi` | on | optimized protocol; no Bob second permutation |
+| `--threads 4` | `4` | worker threads per party |
+| `--channels 4` | `threads` | network channels per party |
+| `--hits 127` | `n - 1` | intersection size |
+| `--single-thread` | off | one worker per party |
+| `--rb-eps 0.07` | auto | RB-OKVS expansion |
+| `--rb-w 104` | auto | RB-OKVS band width |
+
+## Benchmarks
+
+Docker two-process loopback benchmark:
+
+```bash
+RATE=10gbit THREAD_MODE=single THREADS=1 bash script/pqpsi.sh bench lan-single.md
+RATE=10gbit THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench lan-4thread.md
+RATE=200mbit RTT=80ms THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench wan-4thread.md
+```
+
+Native Linux two-process binary:
+
+```bash
+./bin/pqpsi_party_bench 0 128 43000 --kem obf-mlkem --pi hctr --threads 4
+./bin/pqpsi_party_bench 1 128 43000 --kem obf-mlkem --pi hctr --threads 4
+```
+
+Settings:
+
+| Knob          | Default            | Notes                                        |
+| ------------- | ------------------ | -------------------------------------------- |
+| `SIZES`       | `128 256 512 1024` | set sizes                                    |
+| `WARMUPS`     | `3`                | warmups                                      |
+| `ROUNDS`      | `60`               | measured rounds                              |
+| `RATE`        | `10gbit`           | `tc netem` rate on `lo`                      |
+| `RTT`         | empty              | `RTT=80ms` applies `tc delay 40ms`           |
+| `THREAD_MODE` | `multi`            | `single` or `multi`                          |
+| `THREADS`     | `4`                | worker threads per party                     |
+| `CHANNELS`    | `THREADS`          | network channels                             |
+| `KEM`         | `obf-mlkem`        | `obf-mlkem` or `eckem`                       |
+| `PI`          | `hctr`             | permutation                                  |
+| `BOB_PI`      | `0`                | optimized protocol; set `1` for not optimized |
+
+For git, keep one canonical summary per run family. Do not commit raw logs,
+detail folders, or scratch matrix output.
+
+## Dependency Notes
+
+The maintained PQ-PSI path uses RB-OKVS only. RB-OKVS does not use `libOTe`
+directly; it uses `cryptoTools` for AES, PRNG, blocks, and channels.
+`cryptoTools` still links MIRACL.
+
+The old `libOTe`, `libPaXoS`, `libOPRF`, and `libPSI_Tests` trees are not part
+of this build.
+
+## KEMs
+
+| Name        | Type         | Row bytes | Notes                                          |
+| ----------- | ------------ | --------: | ---------------------------------------------- |
+| `obf-mlkem` | post-quantum |       800 | ML-KEM-512 + Kemeleon                          |
+| `eckem`     | non-PQ       |        48 | X25519/Elligator2 + 128-bit tag; uses `xoodoo` |
+
+More details: `frontend/kem/README.md`.
+
+## Permutations
+
+| Name            | Notes                             |
+| --------------- | --------------------------------- |
+| `hctr`          | AES-128-HCTR2                     |
+| `keccak1600`    | ConsPi, Keccak-f[1600], 24 rounds |
+| `keccak1600-12` | ConsPi, Keccak-f[1600], 12 rounds |
+| `keccak800`     | ConsPi, Keccak-f[800]             |
+| `sneik-f512`    | ConsPi, SNEIK-f512                |
+| `xoodoo`        | used by `eckem`                   |
+
+## Dataset
+
+Synthetic sets. Default `hits = n - 1`.
+
+- both parties start from one PRNG-generated base set
+- party 0 rewrites `n - hits` items
+- `--hits` overrides the intersection size
+
+## Third-Party Code
+
+| Component              | Source                                                                     |
+| ---------------------- | -------------------------------------------------------------------------- |
+| mlkem-native           | https://github.com/pq-code-package/mlkem-native                            |
+| Monocypher             | https://github.com/LoupVaillant/Monocypher                                 |
+| XKCP / Xoodoo / Keccak | https://github.com/XKCP/XKCP                                               |
+| KeccakTools            | https://keccak.team/software.html                                          |
+| SNEIK-f512             | https://csrc.nist.gov/Projects/lightweight-cryptography/round-1-candidates |
+| MIRACL                 | https://github.com/miracl/MIRACL                                           |
+| Boost                  | https://www.boost.org                                                      |
+| cryptoTools            | https://github.com/osu-crypto/cryptoTools                                  |

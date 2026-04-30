@@ -1,5 +1,7 @@
 #include "pqpsi/pqpsi.h"
+#include "pqpsi/model.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <iomanip>
@@ -31,9 +33,11 @@ namespace
         NetCfg net;
         RbCfg rb{};
         PiCfg pi{};
+        KemCfg kem{};
         bool trace = false;
         bool showWarmups = false;
         u64 hits = std::numeric_limits<u64>::max();
+        u64 channels = 0;
     };
 
     struct PartySeries
@@ -172,7 +176,7 @@ namespace
         out.invMs.push_back(ms.permDecryptMs);
     }
 
-    void addRun(Series& out, const RunRow& row)
+    void addRun(Series& out, const RunRow& row, const NetCfg&)
     {
         out.runtimeMs.push_back(row.runtimeMs);
         out.commKB.push_back(
@@ -205,9 +209,12 @@ namespace
             << "  --rb-eps <v>\n"
             << "  --rb-cols <v>\n"
             << "  --rb-w <v>\n"
-            << "  --pi <conspi|hctr|keccak800|keccak1600|sneik-f512>\n"
+            << "  --kem <obf-mlkem|eckem>\n"
+            << "  --pi <conspi|hctr|xoodoo|keccak800|keccak1600|keccak1600-12|sneik-f512>\n"
+            << "  --no-bob-pi\n"
             << "  --pi-lambda <v>\n"
             << "  --threads <v>\n"
+            << "  --channels <v>\n"
             << "  --hits <v>\n"
             << "  --misses <v>\n"
             << "  --single-thread\n"
@@ -260,10 +267,26 @@ namespace
             {
                 args.pi.lambda = parseU64(argv[++i], args.pi.lambda);
             }
+            else if (argEq(argv[i], "--no-bob-pi") || argEq(argv[i], "--bob-no-pi"))
+            {
+                args.pi.bobPi = false;
+            }
+            else if (argEq(argv[i], "--bob-pi"))
+            {
+                args.pi.bobPi = true;
+            }
+            else if (argEq(argv[i], "--kem") && i + 1 < argc)
+            {
+                setKem(args.kem, argv[++i]);
+            }
             else if ((argEq(argv[i], "--threads") || argEq(argv[i], "--worker-threads")) && i + 1 < argc)
             {
                 args.rb.workerThreads = parseU64(argv[++i], args.rb.workerThreads);
                 args.rb.multiThread = args.rb.workerThreads != 1;
+            }
+            else if ((argEq(argv[i], "--channels") || argEq(argv[i], "--net-channels")) && i + 1 < argc)
+            {
+                args.channels = parseU64(argv[++i], args.channels);
             }
             else if (argEq(argv[i], "--hits") && i + 1 < argc)
             {
@@ -307,10 +330,11 @@ namespace
         setEnv("PQPSI_TRACE", args.trace ? "1" : "0");
         setEnv("PQPSI_SIM_NET_DELAY_MS", fmt(args.net.delayMs, 3));
         setEnv("PQPSI_SIM_NET_BW_MBPS", fmt(args.net.bwMBps, 3));
+        setEnv("PQPSI_NET_CHANNELS", std::to_string(args.channels));
 
         RunRow row;
         const auto t0 = std::chrono::steady_clock::now();
-        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits, &args.pi);
+        row.ok = rbRun(args.setSize, row.got, row.want, &args.rb, &row.prof, args.hits, &args.pi, &args.kem);
         const auto t1 = std::chrono::steady_clock::now();
         row.runtimeMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
         row.commKB =
@@ -320,7 +344,10 @@ namespace
 
     void printHeader(const Args& args, const RbInfo& rb)
     {
-        auto perm = makePi(args.pi);
+        auto perm = makePi(args.kem.kind == PsiKemKind::EcKem ? PiCfg{ pqperm::Kind::Xoodoo } : args.pi);
+        const u64 channels = args.rb.multiThread
+            ? std::max<u64>(1, std::min<u64>(args.channels == 0 ? rb.workerThreads : args.channels, rb.workerThreads))
+            : 1;
         std::cout
             << "RB-OKVS PQPSI Test\n"
             << "setSize=" << args.setSize
@@ -331,6 +358,7 @@ namespace
             << " bwMBps=" << fmt(args.net.bwMBps)
             << " hits=" << ((args.hits == std::numeric_limits<u64>::max()) ? std::string("default") : std::to_string(args.hits))
             << "\n";
+        std::cout << "kem=" << name(args.kem.kind) << "\n";
         std::cout
             << "rb: eps=" << fmt(rb.eps, 3)
             << " w=" << rb.bandWidth
@@ -340,6 +368,7 @@ namespace
             << " thread_mode=" << (args.rb.multiThread ? "multi" : "single")
             << " party_threads=2"
             << " worker_threads=" << rb.workerThreads
+            << " net_channels=" << channels
             << "\n"
             << "pi: " << perm->name()
             << " detail=" << perm->detail()
@@ -347,6 +376,7 @@ namespace
             << " s=" << perm->s()
             << " lambda=" << args.pi.lambda
             << " rounds=" << perm->rounds()
+            << " bob_pi=" << (args.pi.bobPi ? "on" : "off")
             << "\n\n";
     }
 
@@ -354,10 +384,10 @@ namespace
     {
         const double p0Protocol = std::max(
             0.0,
-            row.prof.party0.totalMs - row.prof.party0.setupMs - row.prof.party0.teardownMs);
+            pqpsiProtocolMs(row.prof.party0));
         const double p1Protocol = std::max(
             0.0,
-            row.prof.party1.totalMs - row.prof.party1.setupMs - row.prof.party1.teardownMs);
+            pqpsiProtocolMs(row.prof.party1));
         const double protocol = std::max(p0Protocol, p1Protocol);
 
         std::cout
@@ -443,6 +473,7 @@ namespace
             << "\n";
         std::cout << "\n";
     }
+
 }
 
 int main(int argc, char** argv)
@@ -469,7 +500,7 @@ int main(int argc, char** argv)
         {
             const RunRow row = runOne(args, base + i * 1000);
             printRunRow(static_cast<size_t>(i), row, false);
-            addRun(ser, row);
+            addRun(ser, row, args.net);
             allOk = allOk && row.ok;
         }
 

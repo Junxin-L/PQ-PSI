@@ -18,6 +18,8 @@ namespace pqpsi_proto
 		bool multiThread = true;
 		size_t workerThreads = 4;
 		RbCfg rb{};
+		KemCfg kem{};
+		bool bobPi = false;
 		pqperm::Perm& ownPi;
 		pqperm::Perm& peerPi;
 		std::vector<block>& set;

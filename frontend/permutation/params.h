@@ -22,6 +22,7 @@ namespace pi
 		case Kind::Keccak800:
 			return 800;
 		case Kind::Keccak1600:
+		case Kind::Keccak1600R12:
 			return 1600;
 		case Kind::SneikF512:
 			return 512;

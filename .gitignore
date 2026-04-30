@@ -198,6 +198,18 @@ GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
 /WeGarbleTests__
+
+# PQ-PSI generated benchmark scratch data.
+build-docker/benchmarks/rbokvs-pqpsi/.tmp*/
+build-docker/benchmarks/rbokvs-pqpsi/.matrix-*/
+build-docker/benchmarks/rbokvs-pqpsi/.matrix-work-*/
+build-docker/benchmarks/rbokvs-pqpsi/details-*/
+build-docker/benchmarks/rbokvs-pqpsi/*.log
+
+# MIRACL build script copies headers into source/ and writes local archives.
+thirdparty/linux/miracl/miracl/source/*.h
+thirdparty/linux/miracl/miracl/source/*.a
+thirdparty/linux/miracl/miracl/*.a
 kProbe_*
 
 CodeDB

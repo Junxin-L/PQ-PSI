@@ -1,5 +1,0 @@
-cd ntl/src
-make clean
-make ./ntl.a 
-
-mv ./ntl.a ./libntl.a

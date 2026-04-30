@@ -130,7 +130,7 @@ docker run --rm --platform linux/amd64 \
     ubuntu:22.04 \
     bash -lc "set -euo pipefail && \
         apt-get update >/tmp/apt-update.log 2>&1 && \
-        apt-get install -y --no-install-recommends libboost-system1.74.0 libboost-thread1.74.0 libgmp10 libgf2x3 libntl44 libsodium23 >/tmp/apt-install.log 2>&1 && \
+        apt-get install -y --no-install-recommends libboost-system1.74.0 libboost-thread1.74.0 libgmp10 libsodium23 >/tmp/apt-install.log 2>&1 && \
         RB_GRID_SIZES='$SIZES' RB_GRID_EPS='${EPS:-}' \
         ./bin/rbokvs_g_check smart '/work/$OUT_REL' '$COARSE_ROUNDS' '$FOCUS_ROUNDS' '$SEED_BASE' '$TARGET_LAMBDA'"
 

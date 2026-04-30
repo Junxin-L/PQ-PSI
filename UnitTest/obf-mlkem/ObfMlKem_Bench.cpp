@@ -1,5 +1,5 @@
-#include "frontend/obf-mlkem/backend/MlKem.h"
-#include "frontend/obf-mlkem/codec/Kemeleon.h"
+#include "frontend/kem/obf-mlkem/backend/MlKem.h"
+#include "frontend/kem/obf-mlkem/codec/Kemeleon.h"
 
 #include <chrono>
 #include <ctime>

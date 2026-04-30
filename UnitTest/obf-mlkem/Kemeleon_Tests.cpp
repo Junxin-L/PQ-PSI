@@ -1,8 +1,8 @@
 #include "Kemeleon_Tests.h"
 
 #include "../Common.h"
-#include "frontend/obf-mlkem/backend/MlKem.h"
-#include "frontend/obf-mlkem/codec/Kemeleon.h"
+#include "frontend/kem/obf-mlkem/backend/MlKem.h"
+#include "frontend/kem/obf-mlkem/codec/Kemeleon.h"
 
 #include <boost/multiprecision/cpp_int.hpp>
 
@@ -13,7 +13,7 @@
 
 using namespace osuCrypto;
 
-namespace tests_libOTe
+namespace tests_pqpsi
 {
 	namespace
 	{
