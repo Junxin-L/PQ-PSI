@@ -146,13 +146,34 @@ Useful flags:
 
 ## Benchmarks
 
-Docker two-process loopback benchmark:
+Quick smoke test, printed to terminal:
 
 ```bash
-RATE=10gbit THREAD_MODE=single THREADS=1 bash script/pqpsi.sh bench lan-single.md
-RATE=10gbit THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench lan-4thread.md
-RATE=200mbit RTT=80ms THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench wan-4thread.md
+SIZES=128 ROUNDS=1 WARMUPS=0 RATE=10gbit THREAD_MODE=multi THREADS=4 \
+  bash script/pqpsi.sh bench -
 ```
+
+Short benchmark reports:
+
+```bash
+SIZES=128 ROUNDS=5 WARMUPS=1 RATE=10gbit THREAD_MODE=single THREADS=1 \
+  bash script/pqpsi.sh bench lan-single-smoke.md
+
+SIZES=128 ROUNDS=5 WARMUPS=1 RATE=10gbit THREAD_MODE=multi THREADS=4 \
+  bash script/pqpsi.sh bench lan-4thread-smoke.md
+
+SIZES=128 ROUNDS=5 WARMUPS=1 RATE=200mbit RTT=80ms THREAD_MODE=multi THREADS=4 \
+  bash script/pqpsi.sh bench wan-4thread-smoke.md
+```
+
+Full default benchmark:
+
+```bash
+RATE=10gbit THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench lan-4thread.md
+```
+
+The full default uses `SIZES="128 256 512 1024"`, `ROUNDS=60`, and
+`WARMUPS=3`, so it can run for a while with little terminal output.
 
 Native Linux two-process binary:
 
