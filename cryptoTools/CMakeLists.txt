@@ -4,7 +4,7 @@ project(cryptoTools)
 
 
 if(1)
-	message(WARNING "\nnasm environment variable NOT defined!!!! This means the fast SHA1 function will not be used.")
+	message(STATUS "cryptoTools: Intel ASM SHA1 is disabled; using the portable SHA1 implementation.")
 
 	# define this so that the asm is disabled.
 	add_definitions(-DNO_INTEL_ASM_SHA1=1)

@@ -14,6 +14,7 @@ Usage
   bash script/pqpsi.sh test thread [setSize] [hits] [rounds] [-- extra flags]
   bash script/pqpsi.sh test process [setSize] [rounds] [-- extra flags]
   bash script/pqpsi.sh bench [out.md]
+  bash script/pqpsi.sh bench native [out.md]
   bash script/pqpsi.sh matrix [out.md]
 
 Common examples
@@ -24,8 +25,9 @@ Common examples
 
 Modes
   test thread   one process, receiver/sender are two local threads.
-  test process  two party processes in one Linux Docker container, with optional tc on lo.
+  test process  two party processes. Uses Docker when available, otherwise native Linux.
   bench         two-process benchmark that writes a markdown report.
+  bench native  native Linux two-process benchmark, no Docker or tc.
   matrix        full loopback matrix helper used for paper-style summary tables.
 
 Defaults
@@ -185,6 +187,13 @@ case "$cmd" in
                 export THREAD_MODE="${THREAD_MODE:-multi}"
                 export THREADS="${THREADS:-4}"
                 apply_common_flags "$@"
+                backend="${PQPSI_PROCESS_BACKEND:-auto}"
+                if [[ "$backend" == "native" ]]; then
+                    exec bash script/benchmark-native-pqpsi.sh -
+                fi
+                if [[ "$backend" == "auto" ]] && ! command -v docker >/dev/null 2>&1; then
+                    exec bash script/benchmark-native-pqpsi.sh -
+                fi
                 exec bash script/benchmark-docker-pqpsi-loopback.sh -
                 ;;
 
@@ -197,6 +206,13 @@ case "$cmd" in
         ;;
 
     bench|benchmark)
+        if [[ "${1:-}" == "native" ]]; then
+            shift
+            exec bash script/benchmark-native-pqpsi.sh "$@"
+        fi
+        if [[ "${PQPSI_BENCH_BACKEND:-docker}" == "native" ]]; then
+            exec bash script/benchmark-native-pqpsi.sh "$@"
+        fi
         exec bash script/benchmark-docker-pqpsi.sh "$@"
         ;;
 

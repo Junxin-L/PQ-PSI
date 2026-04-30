@@ -15,6 +15,7 @@ Baseline:
 | Docker path       | Docker Desktop on macOS, or Docker Engine on Linux |
 | Network emulation | Linux `tc`; Docker runs need `--cap-add NET_ADMIN` |
 
+`nasm` is optional. Without it, `cryptoTools` uses its portable SHA1 path.
 
 Ubuntu packages:
 
@@ -105,14 +106,14 @@ Run tests:
 ./bin/pqpsi_tests eckem
 ./bin/pqpsi_tests rbokvs 128 0.12 64 20
 ./bin/pqpsi_tests pqpsi-rbokvs 128 1 5 43000 --kem obf-mlkem --pi hctr --threads 4
+bash script/pqpsi.sh test process 128 5 --kem obf-mlkem --pi hctr --threads 4
 ```
 
-For two-process Linux runs, use the benchmark binary directly or use the Docker
-wrapper for the same harness as macOS.
+On Linux without Docker, `test process` runs the native two-process path.
 
 ## Test Modes
 
-**Docker wrapper:**
+**Wrapper:**
 
 ```bash
 bash script/pqpsi.sh test thread 128 127 5 --kem obf-mlkem --pi hctr --threads 4
@@ -120,7 +121,7 @@ bash script/pqpsi.sh test process 128 5 --kem obf-mlkem --pi hctr --threads 4
 bash script/pqpsi.sh test process 128 5 --kem eckem --pi xoodoo --threads 4
 ```
 
-**Native Linux thread-mode tests:**
+**Native Linux direct thread-mode tests:**
 
 ```bash
 ./bin/pqpsi_tests pqpsi-rbokvs 128 1 5 43000 --kem obf-mlkem --pi hctr --threads 4
@@ -130,7 +131,7 @@ bash script/pqpsi.sh test process 128 5 --kem eckem --pi xoodoo --threads 4
 | Mode      | Meaning                                           |
 | --------- | ------------------------------------------------- |
 | `thread`  | one process; Alice and Bob are local threads      |
-| `process` | **Docker wrapper**; two party processes in one Linux Docker container |
+| `process` | two party processes; Docker when available, otherwise native Linux |
 
 Useful flags:
 
@@ -178,16 +179,11 @@ RATE=10gbit THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench lan-4thread.m
 The full default uses `SIZES="128 256 512 1024"`, `ROUNDS=60`, and
 `WARMUPS=3`, so it can run for a while with little terminal output.
 
-Native Linux two-process binary, no Docker required:
+Native Linux benchmark, no Docker required:
 
 ```bash
-PORT=43000
-TAG=test-128
-./bin/pqpsi_party_bench 0 128 "$PORT" --tag "$TAG" --kem obf-mlkem --pi hctr --threads 4 --no-bob-pi &
-recv_pid=$!
-sleep 1
-./bin/pqpsi_party_bench 1 128 "$PORT" --tag "$TAG" --kem obf-mlkem --pi hctr --threads 4 --no-bob-pi
-wait "$recv_pid"
+SIZES=128 ROUNDS=5 WARMUPS=1 THREAD_MODE=multi THREADS=4 \
+  bash script/pqpsi.sh bench native native-smoke.md
 ```
 
 Settings:

@@ -117,27 +117,30 @@ target_link_libraries(pqpsi_tests cryptoTools)
 target_link_libraries(construction_permutation_bench cryptoTools)
 
 # obf-mlkem/Kemeleon uses GMP and libsodium.
+set(PQPSI_KEM_TARGETS
+    frontend.exe
+    pqpsi_rbokvs_bench
+    pqpsi_party_bench
+    rbokvs_pqpsi_test
+    pqpsi_tests)
+
+find_path(PQPSI_GMP_INCLUDE_DIR gmp.h HINTS /usr/local/include /opt/homebrew/include)
+find_path(PQPSI_SODIUM_INCLUDE_DIR sodium.h HINTS /usr/local/include /opt/homebrew/include)
 find_library(PQPSI_GMP_LIB NAMES gmp HINTS /usr/local/lib /opt/homebrew/lib)
 find_library(PQPSI_SODIUM_LIB NAMES sodium HINTS /usr/local/lib /opt/homebrew/lib)
-if(PQPSI_GMP_LIB AND PQPSI_SODIUM_LIB)
-    target_link_libraries(frontend.exe
-        ${PQPSI_GMP_LIB}
-        ${PQPSI_SODIUM_LIB})
-    target_link_libraries(pqpsi_rbokvs_bench
-        ${PQPSI_GMP_LIB}
-        ${PQPSI_SODIUM_LIB})
-    target_link_libraries(pqpsi_party_bench
-        ${PQPSI_GMP_LIB}
-        ${PQPSI_SODIUM_LIB})
-    target_link_libraries(rbokvs_g_check
-        ${PQPSI_GMP_LIB}
-        ${PQPSI_SODIUM_LIB})
-    target_link_libraries(rbokvs_pqpsi_test
-        ${PQPSI_GMP_LIB}
-        ${PQPSI_SODIUM_LIB})
-    target_link_libraries(pqpsi_tests
-        ${PQPSI_GMP_LIB}
-        ${PQPSI_SODIUM_LIB})
-else()
-    message(WARNING "frontend.exe, pqpsi_rbokvs_bench, pqpsi_party_bench, rbokvs_g_check, rbokvs_pqpsi_test, and pqpsi_tests need libgmp and libsodium available in the system library path.")
+
+if(NOT PQPSI_GMP_INCLUDE_DIR OR NOT PQPSI_GMP_LIB)
+    message(FATAL_ERROR "GMP development files are required. On Ubuntu, install libgmp-dev.")
 endif()
+if(NOT PQPSI_SODIUM_INCLUDE_DIR OR NOT PQPSI_SODIUM_LIB)
+    message(FATAL_ERROR "libsodium development files are required. On Ubuntu, install libsodium-dev.")
+endif()
+
+foreach(target ${PQPSI_KEM_TARGETS})
+    target_include_directories(${target} PRIVATE
+        ${PQPSI_GMP_INCLUDE_DIR}
+        ${PQPSI_SODIUM_INCLUDE_DIR})
+    target_link_libraries(${target}
+        ${PQPSI_GMP_LIB}
+        ${PQPSI_SODIUM_LIB})
+endforeach()
