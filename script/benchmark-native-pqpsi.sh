@@ -11,9 +11,8 @@ Usage
   bash script/benchmark-native-pqpsi.sh [out.md|-]
 
 Purpose
-  Native Linux two-process PQ-PSI runner. This does not use Docker and does
-  not apply tc network shaping. It is intended for machines where Docker is
-  unavailable.
+  Native Linux two-process PQ-PSI runner. This does not use Docker. It can
+  apply tc shaping on lo when the user has permission.
 
 Examples
   SIZES=128 ROUNDS=1 WARMUPS=0 bash script/benchmark-native-pqpsi.sh -
@@ -47,6 +46,9 @@ fi
 SIZES="${SIZES:-128}"
 WARMUPS="${WARMUPS:-1}"
 ROUNDS="${ROUNDS:-5}"
+RATE="${RATE:-10gbit}"
+RTT="${RTT:-}"
+DELAY="${DELAY:-}"
 THREAD_MODE="${THREAD_MODE:-multi}"
 THREADS="${THREADS:-4}"
 CHANNELS="${CHANNELS:-}"
@@ -62,6 +64,71 @@ RB_COLS="${RB_COLS:-}"
 PORT_BASE_START="${PORT_BASE_START:-43000}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-900}"
 STARTUP_SLEEP="${STARTUP_SLEEP:-1}"
+
+
+parse_delay_ms() {
+    python3 - "$1" <<'PY'
+import re
+import sys
+value = sys.argv[1].strip().lower()
+m = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)(ms|s)?", value)
+if not m:
+    raise SystemExit(f"unsupported delay format: {sys.argv[1]}")
+x = float(m.group(1))
+unit = m.group(2) or "ms"
+if unit == "s":
+    x *= 1000.0
+print(f"{x:.3f}")
+PY
+}
+
+if [[ "$RATE" == "none" || "$RATE" == "off" || "$RATE" == "no" ]]; then
+    RATE=""
+fi
+if [[ -n "$RTT" && -n "$DELAY" ]]; then
+    echo "Specify at most one of RTT or DELAY" >&2
+    exit 1
+fi
+
+applied_delay=""
+target_rtt=""
+if [[ -n "$RTT" ]]; then
+    target_rtt="$(parse_delay_ms "$RTT")"
+    applied_delay="$(python3 - "$target_rtt" <<'PY'
+import sys
+print(f"{float(sys.argv[1]) / 2.0:.3f}")
+PY
+)"
+elif [[ -n "$DELAY" ]]; then
+    applied_delay="$(parse_delay_ms "$DELAY")"
+fi
+
+tc_shape_cmd=(true)
+if [[ -n "$RATE" || -n "$applied_delay" ]]; then
+    if ! command -v tc >/dev/null 2>&1; then
+        echo "tc is required for RATE/RTT/DELAY shaping. Use RATE=none for an unshaped native run." >&2
+        exit 1
+    fi
+    tc_shape_cmd=(tc qdisc replace dev lo root netem)
+    if [[ -n "$applied_delay" && "$applied_delay" != "0.000" ]]; then
+        tc_shape_cmd+=(delay "${applied_delay}ms")
+    fi
+    if [[ -n "$RATE" ]]; then
+        tc_shape_cmd+=(rate "$RATE")
+    fi
+fi
+
+cleanup_tc() {
+    if [[ "${#tc_shape_cmd[@]}" -gt 1 ]]; then
+        tc qdisc del dev lo root >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup_tc EXIT
+cleanup_tc
+if ! "${tc_shape_cmd[@]}"; then
+    echo "failed to apply tc shaping on lo. Use RATE=none, or run with permission to configure tc." >&2
+    exit 1
+fi
 
 if [[ "$THREAD_MODE" == "single" ]]; then
     THREADS=1
@@ -117,15 +184,25 @@ if (( TERM_ONLY == 0 )); then
     mkdir -p "$(dirname "$OUTPUT_FILE")"
 fi
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pqpsi-native.XXXXXX")"
-trap 'rm -rf "$tmp_root"; if [[ "${TERM_ONLY:-0}" == "1" ]]; then rm -f "$OUTPUT_FILE"; fi' EXIT
+trap 'rm -rf "$tmp_root"; if [[ "${TERM_ONLY:-0}" == "1" ]]; then rm -f "$OUTPUT_FILE"; fi; cleanup_tc' EXIT
 
 {
     printf "# PQ-PSI Native Two-Process Benchmark\n\n"
-    printf "This report runs receiver and sender as two native Linux processes. It does not use Docker or tc network shaping.\n\n"
+    printf "This report runs receiver and sender as two native Linux processes. It does not use Docker.\n\n"
     printf "| item | value |\n"
     printf "| --- | --- |\n"
     printf "| measured_rounds | \`%s\` |\n" "$ROUNDS"
     printf "| warmups | \`%s\` |\n" "$WARMUPS"
+    printf "| rate | \`%s\` |\n" "${RATE:-none}"
+    if [[ -n "$target_rtt" ]]; then
+        printf "| target_rtt_ms | \`%s\` |\n" "$target_rtt"
+        printf "| tc_delay_ms | \`%s\` |\n" "$applied_delay"
+    elif [[ -n "$applied_delay" ]]; then
+        printf "| tc_delay_ms | \`%s\` |\n" "$applied_delay"
+    else
+        printf "| tc_delay_ms | \`none\` |\n"
+    fi
+    printf "| tc_backend | \`native-lo\` |\n"
     printf "| thread_mode | \`%s\` |\n" "$THREAD_MODE"
     printf "| threads_per_party | \`%s\` |\n" "$THREADS"
     printf "| net_channels | \`%s\` |\n" "$CHANNELS"

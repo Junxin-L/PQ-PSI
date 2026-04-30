@@ -25,7 +25,7 @@ Common examples
 
 Modes
   test thread   one process, receiver/sender are two local threads.
-  test process  two party processes. Uses Docker when available, otherwise native Linux.
+  test process  two party processes. Native on Linux, Docker on macOS by default.
   bench         two-process benchmark that writes a markdown report.
   bench native  native Linux two-process benchmark, no Docker or tc.
   matrix        full loopback matrix helper used for paper-style summary tables.
@@ -191,7 +191,10 @@ case "$cmd" in
                 if [[ "$backend" == "native" ]]; then
                     exec bash script/benchmark-native-pqpsi.sh -
                 fi
-                if [[ "$backend" == "auto" ]] && ! command -v docker >/dev/null 2>&1; then
+                if [[ "$backend" == "docker" ]]; then
+                    exec bash script/benchmark-docker-pqpsi-loopback.sh -
+                fi
+                if [[ "$backend" == "auto" && "$(uname -s)" == "Linux" ]]; then
                     exec bash script/benchmark-native-pqpsi.sh -
                 fi
                 exec bash script/benchmark-docker-pqpsi-loopback.sh -

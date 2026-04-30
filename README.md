@@ -131,7 +131,10 @@ bash script/pqpsi.sh test process 128 5 --kem eckem --pi xoodoo --threads 4
 | Mode      | Meaning                                           |
 | --------- | ------------------------------------------------- |
 | `thread`  | one process; Alice and Bob are local threads      |
-| `process` | two party processes; Docker when available, otherwise native Linux |
+| `process` | two party processes; this is the mode used for reported benchmark numbers |
+
+By default, process mode uses native processes on Linux and Docker processes on macOS.
+Set `PQPSI_PROCESS_BACKEND=docker` or `PQPSI_PROCESS_BACKEND=native` to force a backend.
 
 Useful flags:
 
@@ -150,14 +153,20 @@ Useful flags:
 
 ## Benchmarks
 
-Quick smoke test, printed to terminal:
+Benchmarks use two party processes. This matches the setup used for the paper
+tables. There are two backends:
+
+- Docker backend: macOS-friendly, uses one Linux Docker container and can apply `tc` network shaping.
+- Native backend: Linux-only, no Docker; supports `tc` on `lo` when permitted.
+
+Docker backend smoke test, printed to terminal:
 
 ```bash
 SIZES=128 ROUNDS=1 WARMUPS=0 RATE=10gbit THREAD_MODE=multi THREADS=4 \
   bash script/pqpsi.sh bench -
 ```
 
-Short benchmark reports:
+Docker backend short benchmark reports:
 
 ```bash
 SIZES=128 ROUNDS=5 WARMUPS=1 RATE=10gbit THREAD_MODE=single THREADS=1 \
@@ -170,7 +179,7 @@ SIZES=128 ROUNDS=5 WARMUPS=1 RATE=200mbit RTT=80ms THREAD_MODE=multi THREADS=4 \
   bash script/pqpsi.sh bench wan-4thread-smoke.md
 ```
 
-Full default benchmark:
+Docker backend full default benchmark:
 
 ```bash
 RATE=10gbit THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench lan-4thread.md
@@ -179,7 +188,7 @@ RATE=10gbit THREAD_MODE=multi THREADS=4 bash script/pqpsi.sh bench lan-4thread.m
 The full default uses `SIZES="128 256 512 1024"`, `ROUNDS=60`, and
 `WARMUPS=3`, so it can run for a while with little terminal output.
 
-Native Linux benchmark, no Docker required:
+Native Linux backend, no Docker:
 
 ```bash
 SIZES=128 ROUNDS=5 WARMUPS=1 THREAD_MODE=multi THREADS=4 \
