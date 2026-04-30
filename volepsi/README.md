@@ -1,5 +1,7 @@
 # VOLE-PSI with pq-crystals Kyber OT
 
+When used from this monorepo, this code lives under `volepsi/`. Run its commands from that directory.
+
 This is our experimental fork of
 [VOLE-PSI](https://github.com/ladnir/volepsi). We use it as a comparison
 for PSI benchmarks where the base OT should be post-quantum.

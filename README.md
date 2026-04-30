@@ -1,5 +1,9 @@
 # PQ-PSI
 
+This repository contains two benchmark code paths:
+
+- `./` is the PQ-PSI implementation.
+- `volepsi/` is our Kyber/VOLE-PSI comparison fork.
 
 ## Requirements
 
@@ -38,7 +42,8 @@ sudo apt-get install -y \
 | `frontend/permutation/` | big permutations       |
 | `tests/pqpsi_tests.cpp` | command-line tests     |
 | `frontend/benchmarks/`  | two-process benchmarks |
-| `script/pqpsi.sh`       | main wrapper           |
+| `script/pqpsi.sh`       | main PQ-PSI wrapper     |
+| `volepsi/`              | Kyber/VOLE-PSI fork    |
 
 ## Scripts
 
