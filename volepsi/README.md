@@ -114,4 +114,3 @@ want to reproduce our container setup. Run VOLE-PSI directly and follow the
 VOLE-PSI build instructions instead:
 
 * Upstream VOLE-PSI: <https://github.com/ladnir/volepsi>
-* Original fork used here: <https://github.com/Junxin-L/volepsi>
